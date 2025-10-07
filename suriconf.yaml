@@ -1,0 +1,29 @@
+%YAML 1.1
+---
+
+suriconf-version: 1.0
+
+suri-configuration: suricata.yaml
+
+mode:
+  modify:
+    enabled: true
+    yaml_change: ask # ask/force
+  suggestion:
+    enabled: false
+
+modules:
+  - name: test_cpu_affinity
+    enabled: false
+
+  - name: memory_usage
+    enabled: false
+
+  - name: set_flow
+    enabled: false
+
+variables:
+  interface: wlan0
+  capture_mode: dpdk
+  max_memory_usage: 10GiB
+  max_cpu_usage: 6
