@@ -5,5 +5,4 @@ edition = "2024"
 
 [dependencies]
 clap = { version = "4.5.48", features = ["derive", "env"] }
-yaml-rust2 = "0.10.4"
-
+serde_yaml = "0.9.34+deprecated"

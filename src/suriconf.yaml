@@ -4,17 +4,18 @@
 suriconf-version: 1.0
 
 suri-configuration: suricata.yaml
+path-to-bin: .
 
 mode:
   modify:
     enabled: true
-    yaml_change: ask # ask/force
+    yaml_change: force # ask/force
   suggestion:
     enabled: false
 
 modules:
   - name: test_cpu_affinity
-    enabled: false
+    enabled: true
 
   - name: memory_usage
     enabled: false
@@ -25,5 +26,5 @@ modules:
 variables:
   interface: wlan0
   capture_mode: dpdk
-  max_memory_usage: 10GiB
+  max_memory_usage: 10 KiB #there has to be space
   max_cpu_usage: 6
