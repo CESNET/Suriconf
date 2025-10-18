@@ -4,7 +4,8 @@
 suriconf-version: 1.0
 
 suri-configuration: suricata.yaml
-path-to-bin: .
+suricata-bin: /usr/bin/suricata
+log-dir: /var/log/suricata/
 
 mode:
   modify:
