@@ -63,7 +63,7 @@ default-log-dir: /var/log/suricata/
 
 # Global stats configuration
 stats:
-  enabled: yes
+  enabled: no
   # The interval field (in seconds) controls the interval at
   # which stats are updated in the log.
   interval: 8
@@ -89,14 +89,14 @@ plugins:
 outputs:
   # a line based alerts log similar to Snort's fast.log
   - fast:
-      enabled: yes
+      enabled: no
       filename: fast.log
       append: yes
       #filetype: regular # 'regular', 'unix_stream' or 'unix_dgram'
 
   # Extensible Event Format (nicknamed EVE) event log in JSON format
   - eve-log:
-      enabled: yes
+      enabled: no
       filetype: regular #regular|syslog|unix_dgram|unix_stream|redis
       filename: eve.json
       # Enable for multi-threaded eve.json output; output files are amended with
@@ -469,7 +469,7 @@ outputs:
 
   # Stats.log contains data from various counters of the Suricata engine.
   - stats:
-      enabled: yes
+      enabled: no
       filename: stats.log
       append: yes       # append to file (yes) or overwrite it (no)
       totals: yes       # stats for all threads merged together
@@ -636,7 +636,7 @@ logging:
       enabled: yes
       # type: json
   - file:
-      enabled: yes
+      enabled: no
       level: info
       filename: suricata.log
       # format: "[%i - %m] %z %d: %S: %M"
