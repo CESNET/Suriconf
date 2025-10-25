@@ -6,6 +6,7 @@ suriconf-version: 1.0
 suri-configuration: suricata.yaml
 suricata-bin: /usr/bin/suricata
 log-dir: /var/log/suricata/
+preconf-time: 5 # in seconds
 
 mode:
   modify:
