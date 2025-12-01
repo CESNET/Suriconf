@@ -28,16 +28,18 @@ pub struct Args {
 
 #[derive(Parser, Debug)]
 pub struct CommonArgs {
+
     /// Change path to bin
-    #[clap(short, long)]
+    #[clap(short='b', long)]
     pub path_to_bin: Option<PathBuf>,
 
-    /// Change name of bin
-    #[clap(short, long)]
-    pub name_of_bin: Option<String>,
-
     /// Change path to logs
-    pub path_to_logs: Option<PathBuf>
+    #[clap(short='l', long)]
+    pub path_to_logs: Option<PathBuf>,
+
+    /// Change the time of Suricata preconfiguration run (in seconds)
+    #[clap(short='t', long="time")]
+    pub preconf_time: Option<u64>, // TODO check
 }
 
 #[derive(Debug, Clone, ValueEnum)]
@@ -49,11 +51,13 @@ pub enum Mode {
 
 #[derive(Subcommand, Debug)]
 pub enum Commands {
-    /// Change variable section in Suriconf configuration file
+    /// Change defaults for Suricata
     Suri {
         #[command(flatten)]
         common: CommonArgs
     },
+
+    /// Change variable section in Suriconf configuration file
     Var {
         #[command(flatten)]
         common: CommonArgs,
@@ -75,3 +79,4 @@ pub enum Commands {
         max_cpu_usage: Option<u64>,
     }
 }
+// TODO check arguments

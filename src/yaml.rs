@@ -1,16 +1,33 @@
 use std::fs::{File};
+use std::io::{Write, BufWriter, BufReader};
 use std::path::{PathBuf};
-use serde_yaml::Value;
+use serde_yaml_ng::Value;
 use walkdir::WalkDir;
 use crate::argument::{Mode, Commands,Args};
+use crate::structures::CreatedLogs;
 
-pub fn open_yaml_to_read(file: &PathBuf) -> Result<Value, Box<dyn std::error::Error>> {
+pub fn open_yaml(file: &PathBuf) -> Result<Value, Box<dyn std::error::Error>> {
     let file = File::open(file)?;
-    let text: Value = serde_yaml::from_reader(file)?;
+    let reader = BufReader::new(file);
+    let text: Value = serde_yaml_ng::from_reader(reader)?;
     Ok(text)
 }
 
-pub fn enable_stats(stats: & Value) -> Option<bool> {
+pub fn close_yaml(yaml: &Value, file: &PathBuf, logs: &CreatedLogs) -> Result<(), Box<dyn std::error::Error>> {
+
+    let file = File::create(&logs.suri_configuration)?;
+    let mut writer = BufWriter::new(file);
+
+    writeln!(writer, "%YAML 1.1")?;
+    writeln!(writer, "---")?;
+
+    let yaml_string = serde_yaml_ng::to_string(yaml)?;
+    writer.write_all(yaml_string.as_bytes())?;
+
+    Ok(())
+}
+// TODO -> to impl block for suricata.yaml -> three func below
+pub fn enable_stats(stats: &Value) -> Option<bool> {
     let enabled = stats.get("enabled")?.as_str()?;
 
     if enabled.eq_ignore_ascii_case("no") || enabled.eq_ignore_ascii_case("false") {
@@ -21,32 +38,49 @@ pub fn enable_stats(stats: & Value) -> Option<bool> {
     Some(false)
 }
 
-pub fn check_enable_stats_log(suricata_string: & Value, vec_of_sur_cmd: &mut Vec<&str>) -> Result<(), String> {
-    if let Some(stats) = suricata_string.get("stats") {
+pub fn create_json_for_logging()-> Result<Value, Box<dyn std::error::Error>> {
+    let required = serde_yaml_ng::from_str::<Value>(r#"
+    eve-log:
+      enabled: yes
+      append: no
+      filename: stats.json
+      types:
+        - stats:
+      totals: yes
+      threads: no
+      deltas: no
+    "#)?;
+    Ok(required)
+}
 
-        if let None = enable_stats(stats) {
+pub fn check_enable_stats_log(suricata_string: &mut Value, vec_of_sur_cmd: &mut Vec<&str>) -> Result<(), String> {
+    if let Some(stats) = suricata_string.get_mut("stats") {
+
+        let result = enable_stats(stats);
+        if let None = result {
             return Err(String::from("Unable to enable stats."));
         }
-        else {
-            vec_of_sur_cmd.push("--set");
-            vec_of_sur_cmd.push("stats.enabled=yes");
-        }
+        if let Some(true) = result {
+            stats["enabled"] = Value::String("true".to_string());
+        };
 
         if let Some(outputs) = suricata_string
-            .get("outputs")
-            .and_then(|o| o.as_sequence()) {
-            for output in outputs {
-                if let Some(output) = output.get("stats")  {
-                    if let None = enable_stats(output) {
-                        return Err(String::from("Unable to enable stats.log."));
-                    }
-                        vec_of_sur_cmd.push("--set");
-                        vec_of_sur_cmd.push("outputs.5.stats.enabled=yes");
+            .get_mut("outputs")
+            .and_then(|v| v.as_sequence_mut()) {
+                match create_json_for_logging() {
+                    Ok(required) => {
+                        let exists = outputs.iter().any(|item| item == &required);
+                        if !exists {
+                            outputs.push(required);
+                        }
                         return Ok(());
+                    },
+                    Err(e) => {
+                        return Err(e.to_string());
+                    },
                 }
             }
-        }
-        Err(String::from("Unable to enable stats.log."))
+        Err(String::from("Unable to enable stats.json."))
     }
     else {
         Err(String::from("Unable to parse Suricata configuration file."))
@@ -58,6 +92,7 @@ pub struct Suriconf {
     pub suri_configuration: PathBuf,
     pub suricata_bin: PathBuf,
     pub log_dir: PathBuf,
+    pub preconf_time: u64,
     pub mode: Mode,
     pub modules: Vec<String>,
     pub interface: String,
@@ -82,6 +117,7 @@ impl Suriconf {
             suri_configuration: PathBuf::new(),
             suricata_bin: PathBuf::new(),
             log_dir: PathBuf::new(),
+            preconf_time: 0,
             mode: Mode::Suggestion,
             modules: vec![],
             interface: String::new(),
@@ -112,24 +148,41 @@ impl Suriconf {
                 self.find_modules(suriconf_string).expect("Unable to parse modules.")
             }
         };
-
+        // TODO nereaguje to na Suri
         self.suricata_bin = if let Some(Commands::Var { common, .. }) = &args.cmd {
-            common
-                .path_to_bin
-                .clone()
-                .expect("Unable to parse path to Suricata binary file.")
+           if let Some(path_to_bin) = &common.path_to_bin {
+               path_to_bin.clone()
+           }
+           else {
+               self.find_suricata_bin(suriconf_string).expect("Unable to parse path to Suricata binary file.")
+           }
         } else {
             self.find_suricata_bin(suriconf_string).expect("Unable to parse path to executable Suricata file.")
         };
 
         self.log_dir = if let Some(Commands::Var { common, .. }) = &args.cmd {
-            common
-                .path_to_logs
-                .clone()
-                .expect("Unable to parse path to logs.")
+            if let Some(path_to_logs) = &common.path_to_logs {
+                path_to_logs.clone()
+            }
+            else {
+                self.find_log_dir(suriconf_string).expect("Unable to parse path to logs.")
+            }
         } else {
             self.find_log_dir(suriconf_string).expect("Unable to parse path to logs.")
         };
+
+        self.preconf_time = if let Some(Commands::Var { common, .. }) = &args.cmd {
+            println!("hahaha");
+            if let Some(preconf_time) = &common.preconf_time {
+                *preconf_time
+            }
+            else {
+                self.find_preconf_time(suriconf_string).expect("Unable to parse time for preconfiguration.")
+            }
+        } else {
+                self.find_preconf_time(suriconf_string).expect("Unable to parse time for preconfiguration.")
+        };
+
 
         self.interface = if let Some(Commands::Var { interface: Some(interface), .. }) = &args.cmd {
             interface.clone()
@@ -220,6 +273,10 @@ impl Suriconf {
         text.get("log-dir").and_then(|c| c.as_str()).map(|c| PathBuf::from(c))
     }
 
+    pub fn find_preconf_time(&self, text: &Value) -> Option<u64> {
+        text.get("preconf-time").and_then(|t| t.as_u64())
+    }
+
     pub fn find_interface(&self, text: &Value) -> Option<String> {
         text.get("variables")
             .and_then(|c| c.get("interface"))
@@ -246,7 +303,7 @@ impl Suriconf {
             "MiB" => {Some(1_024f64 * 1_024f64 * number)},
             "KiB" => {Some(1_024f64 * number)},
             "B" => {Some(number)},
-            _ => None
+            _ => None // TODO some crate?
         }
     }
 
