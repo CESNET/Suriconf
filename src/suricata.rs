@@ -36,7 +36,6 @@ pub fn execute_suricata<'a>(suriconf: & Suriconf, vec_of_sur_cmd: &mut Vec<&str>
         ];
 
         args.extend(vec_of_sur_cmd.iter().copied());
-        println!("{:?}", args);
 
         let ctrl_c_events = if let Ok(receiver) = structures::ctrl_channel() {
             receiver

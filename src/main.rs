@@ -45,7 +45,7 @@ fn main() {
     }
 
     let mut logs = CreatedLogs::new(&suriconf.log_dir);
-    yaml::close_yaml(&suricata_string, &suriconf.suri_configuration, &logs).unwrap();
+    yaml::close_yaml(&suricata_string, &logs.suri_configuration).unwrap();
 
     if let Some(result) = suricata::execute_suricata(&suriconf, &mut vec_of_sur_cmd, &mut logs) {
         if !result {
@@ -55,14 +55,16 @@ fn main() {
         panic!("Unable to execute Suricata.");
     }
 
-    let mut stats =  match json::open_json(&logs.stats) {
-        Ok(stats) => {stats},
-        Err(e) => {
-            panic!("{}",e);
-        }
-    };
-
+    // PRECONFIGURATION
     let mut preconfiguration = Preconfiguration::new();
-    preconfiguration.create_preconfiguration_structure(&stats);
+    match preconfiguration.create_preconfiguration_structure_and_save(&logs) {
+        Err(e) => {
+            panic!("{}", e);
+        },
+        Ok(()) => {}
+    }
+
+    // QUERY
+
 }
 

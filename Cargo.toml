@@ -13,3 +13,6 @@ crossbeam-channel = "0.5.15"
 anyhow = "1.0.100"
 signal-hook = "0.3.18"
 rustc-std-workspace-std = "1.0.1"
+chrono = "0.4.42"
+serde = { version = "1.0.228", features = ["derive"] }
+genawaiter = "0.99.1"

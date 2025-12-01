@@ -3,8 +3,7 @@ use std::io::{Write, BufWriter, BufReader};
 use std::path::{PathBuf};
 use serde_yaml_ng::Value;
 use walkdir::WalkDir;
-use crate::argument::{Mode, Commands,Args};
-use crate::structures::CreatedLogs;
+use crate::argument::{Mode, Commands, Args};
 
 pub fn open_yaml(file: &PathBuf) -> Result<Value, Box<dyn std::error::Error>> {
     let file = File::open(file)?;
@@ -13,9 +12,9 @@ pub fn open_yaml(file: &PathBuf) -> Result<Value, Box<dyn std::error::Error>> {
     Ok(text)
 }
 
-pub fn close_yaml(yaml: &Value, file: &PathBuf, logs: &CreatedLogs) -> Result<(), Box<dyn std::error::Error>> {
+pub fn close_yaml(yaml: &Value, file: &PathBuf) -> Result<(), Box<dyn std::error::Error>> {
 
-    let file = File::create(&logs.suri_configuration)?;
+    let file = File::create(file)?;
     let mut writer = BufWriter::new(file);
 
     writeln!(writer, "%YAML 1.1")?;
@@ -38,18 +37,45 @@ pub fn enable_stats(stats: &Value) -> Option<bool> {
     Some(false)
 }
 
-pub fn create_json_for_logging()-> Result<Value, Box<dyn std::error::Error>> {
-    let required = serde_yaml_ng::from_str::<Value>(r#"
-    eve-log:
-      enabled: yes
-      append: no
-      filename: stats.json
-      types:
-        - stats:
-      totals: yes
-      threads: no
-      deltas: no
-    "#)?;
+enum EveLogType {
+    Flow,
+    Stats
+}
+
+pub fn create_json_for_logging(enabled: bool, stats: EveLogType)-> Result<Value, Box<dyn std::error::Error>> {
+    let required;
+    match stats {
+         EveLogType::Flow => {
+              required = format!(r#"
+                eve-log:
+                  enabled: {}
+                  append: no
+                  filename: stats.json
+                  types:
+                    - stats:
+                        totals: yes
+                        threads: yes
+                        deltas: no
+                        null-values: false
+                "#,
+                if enabled { "yes" } else { "no" },
+                 );
+         },
+        EveLogType::Stats => {
+            required = format!(r#"
+                eve-log:
+                  enabled: {}
+                  append: no
+                  filename: flows.json
+                  types:
+                    - flow:
+                "#,
+               if enabled { "yes" } else { "no" },
+                );
+        }
+    }
+
+    let required = serde_yaml_ng::from_str::<Value>(&required)?;
     Ok(required)
 }
 
@@ -63,22 +89,42 @@ pub fn check_enable_stats_log(suricata_string: &mut Value, vec_of_sur_cmd: &mut 
         if let Some(true) = result {
             stats["enabled"] = Value::String("true".to_string());
         };
-
+        
         if let Some(outputs) = suricata_string
             .get_mut("outputs")
             .and_then(|v| v.as_sequence_mut()) {
-                match create_json_for_logging() {
-                    Ok(required) => {
-                        let exists = outputs.iter().any(|item| item == &required);
-                        if !exists {
-                            outputs.push(required);
+                for o in outputs.iter_mut() {
+                    if let Some(m) = o.as_mapping_mut() {
+                        for v in m.values_mut() {
+                            if let Some(inner) = v.as_mapping_mut() {
+                                inner.insert(
+                                    Value::String("enabled".into()),
+                                    Value::String("no".into()),
+                                );
+                            }
                         }
-                        return Ok(());
-                    },
-                    Err(e) => {
-                        return Err(e.to_string());
-                    },
+                    }
                 }
+
+                for (enabled, log_type) in [
+                    (false, EveLogType::Stats),
+                    (false, EveLogType::Flow),
+                    (true,  EveLogType::Stats),
+                    (true,  EveLogType::Flow),
+                ] {
+                    match create_json_for_logging(enabled, log_type) {
+                        Ok(required) => {
+                            if enabled {
+                                outputs.push(required);
+                            } else {
+                                outputs.retain(|item| item != &required);
+                            }
+                        }
+                        Err(e) => return Err(e.to_string()),
+                    }
+                }
+                return Ok(());
+
             }
         Err(String::from("Unable to enable stats.json."))
     }
@@ -170,9 +216,8 @@ impl Suriconf {
         } else {
             self.find_log_dir(suriconf_string).expect("Unable to parse path to logs.")
         };
-
+        // HUGE TODO -> with var it works, with suri it doesn't :/
         self.preconf_time = if let Some(Commands::Var { common, .. }) = &args.cmd {
-            println!("hahaha");
             if let Some(preconf_time) = &common.preconf_time {
                 *preconf_time
             }
