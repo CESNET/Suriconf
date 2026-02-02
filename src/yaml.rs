@@ -194,40 +194,27 @@ impl Suriconf {
                 self.find_modules(suriconf_string).expect("Unable to parse modules.")
             }
         };
-        // TODO nereaguje to na Suri
-        self.suricata_bin = if let Some(Commands::Var { common, .. }) = &args.cmd {
-           if let Some(path_to_bin) = &common.path_to_bin {
-               path_to_bin.clone()
+
+        self.suricata_bin = if let Some(Commands::Suri {path_to_bin: Some(p), ..}) = &args.cmd  {
+               p.clone()
            }
            else {
                self.find_suricata_bin(suriconf_string).expect("Unable to parse path to Suricata binary file.")
-           }
-        } else {
-            self.find_suricata_bin(suriconf_string).expect("Unable to parse path to executable Suricata file.")
-        };
+           };
 
-        self.log_dir = if let Some(Commands::Var { common, .. }) = &args.cmd {
-            if let Some(path_to_logs) = &common.path_to_logs {
-                path_to_logs.clone()
+        self.log_dir = if let Some(Commands::Suri { path_to_logs: Some(p), .. }) = &args.cmd {
+                p.clone()
             }
             else {
                 self.find_log_dir(suriconf_string).expect("Unable to parse path to logs.")
-            }
-        } else {
-            self.find_log_dir(suriconf_string).expect("Unable to parse path to logs.")
-        };
-        // HUGE TODO -> with var it works, with suri it doesn't :/
-        self.preconf_time = if let Some(Commands::Var { common, .. }) = &args.cmd {
-            if let Some(preconf_time) = &common.preconf_time {
-                *preconf_time
+            };
+
+        self.preconf_time = if let Some( Commands::Suri { preconf_time: Some(p), .. }) = &args.cmd {
+            p.clone()
             }
             else {
                 self.find_preconf_time(suriconf_string).expect("Unable to parse time for preconfiguration.")
-            }
-        } else {
-                self.find_preconf_time(suriconf_string).expect("Unable to parse time for preconfiguration.")
-        };
-
+            };
 
         self.interface = if let Some(Commands::Var { interface: Some(interface), .. }) = &args.cmd {
             interface.clone()

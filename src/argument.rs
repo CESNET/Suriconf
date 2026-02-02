@@ -6,13 +6,13 @@ use std::path::{PathBuf};
 #[clap(version)]
 pub struct Args {
 
-    /// Specify Suriconf configuration file
-    #[clap(short='c', long="conf", default_value="suriconf.yaml")]
-    pub suriconf_config: PathBuf,
-
     /// Specify Suricata configuration file
     #[clap(short='s', long="sconf")]
     pub suricata_config: Option<PathBuf>,
+
+    /// Specify Suriconf configuration file
+    #[clap(short='c', long="conf", default_value="suriconf.yaml")]
+    pub suriconf_config: PathBuf,
 
     /// Specify Suriconf configuration mode 
     #[clap(short='m', long="mode", value_enum)]
@@ -25,23 +25,6 @@ pub struct Args {
     #[command(subcommand)]
     pub cmd: Option<Commands>,
 }
-
-#[derive(Parser, Debug)]
-pub struct CommonArgs {
-
-    /// Change path to bin
-    #[clap(short='b', long)]
-    pub path_to_bin: Option<PathBuf>,
-
-    /// Change path to logs
-    #[clap(short='l', long)]
-    pub path_to_logs: Option<PathBuf>,
-
-    /// Change the time of Suricata preconfiguration run (in seconds)
-    #[clap(short='t', long="time")]
-    pub preconf_time: Option<u64>, // TODO check
-}
-
 #[derive(Debug, Clone, ValueEnum)]
 pub enum Mode {
     AskModify,
@@ -51,17 +34,24 @@ pub enum Mode {
 
 #[derive(Subcommand, Debug)]
 pub enum Commands {
+    
     /// Change defaults for Suricata
     Suri {
-        #[command(flatten)]
-        common: CommonArgs
+        /// Change path to bin
+        #[clap(short='b', long)]
+        path_to_bin: Option<PathBuf>,
+
+        /// Change path to logs
+        #[clap(short='l', long)]
+        path_to_logs: Option<PathBuf>,
+
+        /// Change the time of Suricata preconfiguration run (in seconds)
+        #[clap(short='t', long="time")]
+        preconf_time: Option<u64>,
     },
 
     /// Change variable section in Suriconf configuration file
     Var {
-        #[command(flatten)]
-        common: CommonArgs,
-
         /// Change interface
         #[clap(short, long)]
         interface: Option<String>,
@@ -79,4 +69,3 @@ pub enum Commands {
         max_cpu_usage: Option<u64>,
     }
 }
-// TODO check arguments
