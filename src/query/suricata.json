@@ -1,0 +1,109 @@
+{
+  "questions": {
+    "flow_memcap": {
+      "path_to_value": "/flow/memcap"
+    },
+    "flow_hashsize": {
+      "path_to_value": "/flow/hash-size"
+    },
+    "flow_prealloc": {
+      "path_to_value": "/flow/prealloc"
+    },
+    "flow_emergency_recovery": {
+      "path_to_value": "/flow/emergency_recovery"
+    },
+    "flow_managers": {
+      "path_to_value": "/flow/managers"
+    },
+    "flow_recyclers": {
+      "path_to_value": "/flow/recyclers"
+    },
+    "wrk_cpu_set" : {
+      "path_to_value": "/threading/cpu-affinity/worker-cpu-set/interface-specific-cpu-set/var_index/cpu"
+    },
+    "flow_timeouts_def_new": {
+      "path_to_value": "/flow-timeouts/default/new"
+    },
+    "flow_timeouts_def_estab": {
+      "path_to_value": "/flow-timeouts/default/established"
+    },
+    "flow_timeouts_def_closed": {
+      "path_to_value": "/flow-timeouts/default/closed"
+    },
+    "flow_timeouts_def_bypass": {
+      "path_to_value": "/flow-timeouts/default/bypassed"
+    },
+    "flow_timeouts_def_em_new": {
+      "path_to_value": "/flow-timeouts/default/emergency-new"
+    },
+    "flow_timeouts_def_em_estab": {
+      "path_to_value": "/flow-timeouts/default/emergency-established"
+    },
+    "flow_timeouts_def_em_closed": {
+      "path_to_value": "/flow-timeouts/default/emergency-established"
+    },
+    "flow_timeouts_def_em_bypass": {
+      "path_to_value": "/flow-timeouts/default/emergency-bypassed"
+    },
+    "flow_timeouts_tcp_new": {
+      "path_to_value": "/flow-timeouts/tcp/new"
+    },
+    "flow_timeouts_tcp_estab": {
+      "path_to_value": "/flow-timeouts/tcp/established"
+    },
+    "flow_timeouts_tcp_closed": {
+      "path_to_value": "/flow-timeouts/tcp/closed"
+    },
+    "flow_timeouts_tcp_bypass": {
+      "path_to_value": "/flow-timeouts/tcp/bypassed"
+    },
+    "flow_timeouts_tcp_em_new": {
+      "path_to_value": "/flow-timeouts/tcp/emergency-new"
+    },
+    "flow_timeouts_tcp_em_estab": {
+      "path_to_value": "/flow-timeouts/tcp/emergency-established"
+    },
+    "flow_timeouts_tcp_em_closed": {
+      "path_to_value": "/flow-timeouts/tcp/emergency-established"
+    },
+    "flow_timeouts_tcp_em_bypass": {
+      "path_to_value": "/flow-timeouts/tcp/emergency-bypassed"
+    },
+    "flow_timeouts_udp_new": {
+      "path_to_value": "/flow-timeouts/udp/new"
+    },
+    "flow_timeouts_udp_estab": {
+      "path_to_value": "/flow-timeouts/udp/established"
+    },
+    "flow_timeouts_udp_bypass": {
+      "path_to_value": "/flow-timeouts/udp/bypassed"
+    },
+    "flow_timeouts_udp_em_new": {
+      "path_to_value": "/flow-timeouts/udp/emergency-new"
+    },
+    "flow_timeouts_udp_em_estab": {
+      "path_to_value": "/flow-timeouts/udp/emergency-established"
+    },
+    "flow_timeouts_udp_em_bypass": {
+      "path_to_value": "/flow-timeouts/udp/emergency-bypassed"
+    },
+    "flow_timeouts_icmp_new": {
+      "path_to_value": "/flow-timeouts/icmp/new"
+    },
+    "flow_timeouts_icmp_estab": {
+      "path_to_value": "/flow-timeouts/icmp/established"
+    },
+    "flow_timeouts_icmp_bypass": {
+      "path_to_value": "/flow-timeouts/icmp/bypassed"
+    },
+    "flow_timeouts_icmp_em_new": {
+      "path_to_value": "/flow-timeouts/icmp/emergency-new"
+    },
+    "flow_timeouts_icmp_em_estab": {
+      "path_to_value": "/flow-timeouts/icmp/emergency-established"
+    },
+    "flow_timeouts_icmp_em_bypass": {
+      "path_to_value": "/flow-timeouts/icmp/emergency-bypassed"
+    }
+  }
+}

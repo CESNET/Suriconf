@@ -1,0 +1,7 @@
+{
+  "questions": {
+    "max_memory_usage": {
+      "path_to_value": "/variables/max_memory_usage"
+    }
+  }
+}

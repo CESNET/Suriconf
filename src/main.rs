@@ -3,9 +3,9 @@ use suriconf::argument::Args;
 use suriconf::yaml;
 use suriconf::yaml::Suriconf;
 use suriconf::json::Preconfiguration;
-use suriconf::json;
-use suriconf::structures::CreatedLogs;
+use suriconf::structures::{CreatedLogs, JsonVar};
 use suriconf::suricata;
+use suriconf::query::Resources;
 
 #[allow(unused_variables)]
 fn main() {
@@ -15,7 +15,7 @@ fn main() {
     let suriconf_string = match yaml::open_yaml(&args.suriconf_config) {
         Ok(suriconf_string) => {suriconf_string},
         Err(e) => {
-            panic!("{}", e);
+            panic!("{e}");
         }
     };
 
@@ -25,17 +25,25 @@ fn main() {
     let mut suricata_string = match yaml::open_yaml(&suriconf.suri_configuration) {
         Ok(suricata_string) => {suricata_string},
         Err(e) => {
-            panic!("{}", e);
+            panic!("{e}");
         }
     };
 
-    let mut vec_of_sur_cmd: Vec<&str> = vec![];
+    let mut vec_of_sur_cmd: Vec<&str> = vec![]; // TODO
     match yaml::check_enable_stats_log(&mut suricata_string, &mut vec_of_sur_cmd) {
         Err(e) => {
-            panic!("{}", e);
+            panic!("{e}"); // TODO NOT GOOD PRACTISE
         },
         Ok(()) => {}
     }
+
+    let mut json_var: JsonVar = Default::default();
+    match yaml::check_set_cpu_affinity(&mut suricata_string, &suriconf, &mut json_var) {
+        Err(e) => {
+            panic!("{e}")
+        },
+        Ok(()) => {}
+    };
 
     match suriconf.find_suricata_executable_file() {
         Err(e) => {
@@ -47,16 +55,17 @@ fn main() {
     let mut logs = CreatedLogs::new(&suriconf.log_dir);
     yaml::close_yaml(&suricata_string, &logs.suri_configuration).unwrap();
 
-    if let Some(result) = suricata::execute_suricata(&suriconf, &mut vec_of_sur_cmd, &mut logs) {
-        if !result {
-            return;
+    let sys = if let Some(sys) = suricata::execute_suricata(&suriconf, &mut vec_of_sur_cmd, &mut logs) {
+        if sys.threads.is_empty() {
+            panic!("Unable to get data from Suricata.");
         }
+        sys
     } else {
-        panic!("Unable to execute Suricata.");
-    }
+        return;
+    };
 
     // PRECONFIGURATION
-    let mut preconfiguration = Preconfiguration::new();
+    let mut preconfiguration = Preconfiguration::new(sys.threads);
     match preconfiguration.create_preconfiguration_structure_and_save(&logs) {
         Err(e) => {
             panic!("{}", e);
@@ -65,6 +74,7 @@ fn main() {
     }
 
     // QUERY
-
+    let mut resources =  Resources::new(logs.suri_configuration, suriconf, args.suriconf_config, logs.preconfiguration, json_var);
+    resources.main_query();
 }
 

@@ -9,8 +9,121 @@ use signal_hook::consts::signal::SIGINT;
 use signal_hook::iterator::Signals;
 use std::thread;
 use anyhow::Result;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+use std::collections::HashMap;
+use strum_macros::{Display, EnumIter};
+use sysinfo::System;
+use crate::flow::FlowModule;
+use clap::{ValueEnum};
+pub enum Reason {
+    timeout,
+    shutdown,
+    forced,
+    emergency,
+    tcp_reuse
+}
+// TODO, in future think about tcp_reuse
 
+#[derive(Debug, Clone, ValueEnum)]
+pub enum CaptureMode {
+    DPDK,
+    AF_PACKET
+}
+
+impl Default for CaptureMode {
+    fn default() -> Self { CaptureMode::AF_PACKET }
+}
+
+impl Reason {
+    pub fn new(key_str: &str) -> Self {
+        match key_str {
+            "timeout" => Reason::timeout,
+            "shutdown" => Reason::shutdown,
+            "forced" => Reason::forced,
+            "emergency" => Reason::emergency,
+            "tcp_reuse" => Reason::tcp_reuse,
+            _ => panic!("Unable to convert key string slice.")
+        }
+    }
+}
+
+#[derive(Debug, PartialEq)]
+pub struct Answer<'a>{
+    pub key: &'a Keys,
+    pub value: &'a Value
+}
+
+pub struct Change {
+    pub keys: Keys,
+    pub value: Value
+}
+impl Change {
+    pub fn collect_changes(table: &HashMap<Keys, Value>) -> Vec<Change> {
+        table.iter().filter_map(|(k, v)| { if !v.is_null() { Some(Change { keys: *k, value: v.clone() }) } else { None } }).collect()
+    }
+}
+
+#[derive(PartialEq, Eq)]
+pub enum SuricataAgain {
+    Done,
+    RunAgain
+}
+
+#[derive(PartialEq, Debug)]
+pub enum RobRegression{
+    Huber,
+    TheilSen
+}
+
+pub enum ModuleResult {
+    Up,
+    Ok,
+    Down
+}
+
+#[derive(Default, Debug)]
+pub struct SystemVar {
+    pub sys: System,
+    pub threads: Vec<Thread>
+}
+
+#[derive(Deserialize, Serialize, PartialEq, Default, Debug)]
+pub struct Thread {
+    pub name: Vec<String>,
+    pub core_id: u32,
+    pub cpu_usage: Vec<f32>
+}
+
+#[derive(Serialize, Debug, Default)]
+pub struct Threads {
+    pub workers: Vec<u64>,
+    pub management: Vec<u64>,
+}
+
+#[derive(Debug, Default)]
+pub struct JsonVar {
+    pub var_index: HashMap<Keys, Value>
+}
+
+pub trait Module {
+
+    fn new(analysis: &Analysis) -> Self where Self: Sized;
+
+    fn questions(&self) -> &HashMap<Keys, Value>;
+    fn init_questions(&self) -> Vec<Keys> {
+        self.questions().keys().copied().collect()
+    }
+    fn main(&mut self, answers: &Vec<Answer<'_>>) -> Vec<Change>;
+}
+
+pub fn create_module(name: &str, analysis: &Analysis) -> Box<dyn Module> {
+    match name {
+        "flow" => Box::new(FlowModule::new(analysis)),
+        "test_cpu_affinity" => Box::new(FlowModule::new(analysis)), // TODO tady to nepatri, ale rust nepusti s todo
+        _ => panic!("Unknown module."),
+    }
+}
 pub struct CreatedLogs {
     pub suri_configuration: PathBuf,
     pub stats: PathBuf,
@@ -18,6 +131,131 @@ pub struct CreatedLogs {
     pub preconfiguration: PathBuf,
 }
 
+#[derive(Debug, Hash, Eq, PartialEq, Copy, Clone)]
+pub enum Keys { // JUST FOR FLOW
+    max_memory_usage,
+    wrk_cpu_set,
+    threads_stat,
+    uptime,
+    memcap_pressure,
+    memcap_pressure_max,
+    flow_memcap,
+    flow_memuse,
+    flow_active,
+    flow_hashsize,
+    flow_prealloc,
+    flow_managers,
+    flow_recyclers,
+    flow_set, // set of flows for analysis
+    flow_mgr_full_hash_pass,
+    flow_mgr_rows_maxlen,
+    flow_mgr_flows_checked,
+    flow_rc_queue_avg,
+    flow_rc_recycled,
+    flow_emergency_recovery,
+    flow_emerg_mode_entered,
+    flow_emerg_mode_over,
+    flow_wrk_spare_sync_avg,
+    flow_wrk_spare_sync_empty,
+    flow_wrk_spare_sync_incomplete,
+    flow_timeouts_def_new,
+    flow_timeouts_def_estab,
+    flow_timeouts_def_closed,
+    flow_timeouts_def_bypass,
+    flow_timeouts_def_em_new,
+    flow_timeouts_def_em_estab,
+    flow_timeouts_def_em_closed,
+    flow_timeouts_def_em_bypass,
+    flow_timeouts_tcp_new,
+    flow_timeouts_tcp_estab,
+    flow_timeouts_tcp_closed,
+    flow_timeouts_tcp_bypass,
+    flow_timeouts_tcp_em_new,
+    flow_timeouts_tcp_em_estab,
+    flow_timeouts_tcp_em_closed,
+    flow_timeouts_tcp_em_bypass,
+    flow_timeouts_udp_new,
+    flow_timeouts_udp_estab,
+    flow_timeouts_udp_bypass,
+    flow_timeouts_udp_em_new,
+    flow_timeouts_udp_em_estab,
+    flow_timeouts_udp_em_bypass,
+    flow_timeouts_icmp_new,
+    flow_timeouts_icmp_estab,
+    flow_timeouts_icmp_bypass,
+    flow_timeouts_icmp_em_new,
+    flow_timeouts_icmp_em_estab,
+    flow_timeouts_icmp_em_bypass
+}
+
+impl Keys {
+    pub fn new(key_str: &str) -> Self {
+        match key_str {
+            "max_memory_usage" => Keys::max_memory_usage,
+            "wrk_cpu_set" => Keys::wrk_cpu_set,
+            "threads_stat" => Keys::threads_stat,
+            "uptime" => Keys::uptime,
+            "memcap_pressure" => Keys::memcap_pressure,
+            "memcap_pressure_max" => Keys::memcap_pressure_max,
+            "flow_memcap" => Keys::flow_memcap,
+            "flow_memuse" => Keys::flow_memuse,
+            "flow_active" => Keys::flow_active,
+            "flow_hashsize" => Keys::flow_hashsize,
+            "flow_prealloc"=> Keys::flow_prealloc,
+            "flow_managers" => Keys::flow_managers,
+            "flow_recyclers" => Keys::flow_recyclers,
+            "flow_set" => Keys::flow_set,
+            "flow_mgr_full_hash_pass" => Keys::flow_mgr_full_hash_pass,
+            "flow_mgr_rows_maxlen" => Keys::flow_mgr_rows_maxlen,
+            "flow_mgr_flows_checked" => Keys::flow_mgr_flows_checked,
+            "flow_rc_queue_avg" => Keys::flow_rc_queue_avg,
+            "flow_rc_recycled" => Keys::flow_rc_recycled,
+            "flow_emergency_recovery" => Keys::flow_emergency_recovery,
+            "flow_emerg_mode_entered" => Keys::flow_emerg_mode_entered,
+            "flow_emerg_mode_over" => Keys::flow_emerg_mode_over,
+            "flow_wrk_spare_sync_avg" => Keys::flow_wrk_spare_sync_avg,
+            "flow_wrk_spare_sync_empty" => Keys::flow_wrk_spare_sync_empty,
+            "flow_wrk_spare_sync_incomplete" => Keys::flow_wrk_spare_sync_incomplete,
+            "flow_timeouts_def_new" => Keys::flow_timeouts_def_new,
+            "flow_timeouts_def_estab" => Keys::flow_timeouts_def_estab,
+            "flow_timeouts_def_closed" => Keys::flow_timeouts_def_closed,
+            "flow_timeouts_def_bypass" => Keys::flow_timeouts_def_bypass,
+            "flow_timeouts_def_em_new" => Keys::flow_timeouts_def_em_new,
+            "flow_timeouts_def_em_estab" => Keys::flow_timeouts_def_em_estab,
+            "flow_timeouts_def_em_closed" => Keys::flow_timeouts_def_em_closed,
+            "flow_timeouts_def_em_bypass" => Keys::flow_timeouts_def_em_bypass,
+            "flow_timeouts_tcp_new" => Keys::flow_timeouts_tcp_new,
+            "flow_timeouts_tcp_estab" => Keys::flow_timeouts_tcp_estab,
+            "flow_timeouts_tcp_closed" => Keys::flow_timeouts_tcp_closed,
+            "flow_timeouts_tcp_bypass" => Keys::flow_timeouts_tcp_bypass,
+            "flow_timeouts_tcp_em_new" => Keys::flow_timeouts_tcp_em_new,
+            "flow_timeouts_tcp_em_estab" => Keys::flow_timeouts_tcp_em_estab,
+            "flow_timeouts_tcp_em_closed" => Keys::flow_timeouts_tcp_em_closed,
+            "flow_timeouts_tcp_em_bypass" => Keys::flow_timeouts_tcp_em_bypass,
+            "flow_timeouts_udp_new" => Keys::flow_timeouts_udp_new,
+            "flow_timeouts_udp_estab" => Keys::flow_timeouts_udp_estab,
+            "flow_timeouts_udp_bypass" => Keys::flow_timeouts_udp_bypass,
+            "flow_timeouts_udp_em_new" => Keys::flow_timeouts_udp_em_new,
+            "flow_timeouts_udp_em_estab" => Keys::flow_timeouts_udp_em_estab,
+            "flow_timeouts_udp_em_bypass" => Keys::flow_timeouts_udp_em_bypass,
+            "flow_timeouts_icmp_new" => Keys::flow_timeouts_icmp_new,
+            "flow_timeouts_icmp_estab" => Keys::flow_timeouts_icmp_estab,
+            "flow_timeouts_icmp_bypass" => Keys::flow_timeouts_icmp_bypass,
+            "flow_timeouts_icmp_em_new" => Keys::flow_timeouts_icmp_em_new,
+            "flow_timeouts_icmp_em_estab" => Keys::flow_timeouts_icmp_em_estab,
+            "flow_timeouts_icmp_em_bypass" => Keys::flow_timeouts_icmp_em_bypass,
+            _ => panic!("Unable to convert key string slice.")
+        }
+    }
+
+}
+
+#[derive(EnumIter, Debug, Display,PartialEq, Eq, Copy, Clone)]
+pub enum FileNames {
+    suricata,
+    suriconf,
+    preconf
+}
 impl CreatedLogs {
     pub fn new(log_dir: &PathBuf) -> Self {
         let system_time = SystemTime::now();
@@ -154,6 +392,31 @@ impl TrasportProtocols {
             "udp" => Some(Self::UDP),
             _ => None
         }
+    }
+}
+
+#[derive(Debug, Clone, ValueEnum)]
+pub enum Mode {
+    AskModify,
+    ForceModify,
+    Suggestion
+}
+
+impl Default for Mode {
+    fn default() -> Self {
+        Mode::Suggestion
+    }
+}
+
+#[derive(Debug, Clone, ValueEnum)]
+pub enum Analysis {
+    Static,
+    Dynamic
+}
+
+impl Default for Analysis {
+    fn default() -> Self {
+        Analysis::Static
     }
 }
 

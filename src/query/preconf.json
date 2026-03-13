@@ -1,0 +1,56 @@
+{
+  "questions": {
+    "flow_memuse": {
+      "path_to_value": "/flow/flow_memuse"
+    },
+    "flow_set": {
+      "path_to_value": "/flow/flows"
+    },
+    "flow_active": {
+      "path_to_value": "/flow/flow_active"
+    },
+    "flow_mgr_full_hash_pass": {
+      "path_to_value": "/flow/flow_mgr_full_hash_pass"
+    },
+    "flow_mgr_rows_maxlen": {
+      "path_to_value": "/flow/flow_mgr_rows_maxlen"
+    },
+    "flow_mgr_flows_checked": {
+      "path_to_value": "/flow/flow_mgr_flows_checked"
+    },
+    "flow_rc_queue_avg": {
+      "path_to_value": "/flow/flow_rc_queue_avg"
+    },
+    "flow_rc_recycled": {
+      "path_to_value": "/flow/flow_rc_recycled"
+    },
+    "flow_emerg_mode_over": {
+      "path_to_value": "/flow/flow_emerg_mode_over"
+    },
+    "flow_emerg_mode_entered": {
+      "path_to_value": "/flow/flow_emerg_mode_entered"
+    },
+    "memcap_pressure": {
+      "path_to_value": "/memcap_pressure"
+    },
+    "memcap_pressure_max": {
+      "path_to_value": "/memcap_pressure_max"
+    },
+    "flow_wrk_spare_sync_avg": {
+      "path_to_value": "/flow/flow_wrk_spare_sync_avg"
+    } ,
+    "flow_wrk_spare_sync_empty": {
+      "path_to_value": "/flow/flow_wrk_spare_sync_empty"
+    },
+    "flow_wrk_spare_sync_incomplete": {
+      "path_to_value": "/flow/flow_wrk_spare_sync_incomplete"
+    },
+    "threads_stat": {
+      "path_to_value": "/threads_stat"
+    },
+    "uptime": {
+      "path_to_value": "/uptime"
+
+    }
+  }
+}

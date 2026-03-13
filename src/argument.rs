@@ -1,5 +1,6 @@
-use clap::{Parser, Subcommand, ValueEnum};
+use clap::{Parser, Subcommand};
 use std::path::{PathBuf};
+use crate::structures::{Analysis, Mode, CaptureMode};
 
 /// Suriconf - Configuration Assistant for Suricata
 #[derive(Parser, Debug)]
@@ -25,16 +26,11 @@ pub struct Args {
     #[command(subcommand)]
     pub cmd: Option<Commands>,
 }
-#[derive(Debug, Clone, ValueEnum)]
-pub enum Mode {
-    AskModify,
-    ForceModify,
-    Suggestion
-}
+
 
 #[derive(Subcommand, Debug)]
 pub enum Commands {
-    
+
     /// Change defaults for Suricata
     Suri {
         /// Change path to bin
@@ -48,6 +44,9 @@ pub enum Commands {
         /// Change the time of Suricata preconfiguration run (in seconds)
         #[clap(short='t', long="time")]
         preconf_time: Option<u64>,
+
+        #[clap(short='a', long="analysis")]
+        analysis: Option<Analysis>
     },
 
     /// Change variable section in Suriconf configuration file
@@ -57,15 +56,16 @@ pub enum Commands {
         interface: Option<String>,
 
         /// Change capture mode
-        #[clap(short, long)]
-        capture_mode: Option<String>,
+        #[clap(short, long, value_enum)]
+        capture_mode: Option<CaptureMode>,
 
         /// Change max memory usage
         #[clap(short='m', long="memory")]
-        max_memory_usage: Option<f64>,
+        max_memory_usage: Option<u64>,
 
         /// Change max cpu usage
-        #[clap(short='C', long="cpu")]
-        max_cpu_usage: Option<u64>,
+        #[clap(short='C', long="cpu", value_delimiter = ' ', num_args = 1..)]
+        max_cpu_usage_vec: Option<Vec<u64>>,
     }
 }
+// TODO check arguments

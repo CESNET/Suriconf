@@ -1,18 +1,22 @@
 use std::path::PathBuf;
 use std::process::{Child, Command};
 use crate::yaml::Suriconf;
-use crate::json;
+use crate::{json, FLOW_WINDOW};
 use crate::json::{Preconfiguration};
-use crate::structures::CreatedLogs;
-use crate::structures;
+use crate::structures::{Thread, SystemVar, ctrl_channel, CreatedLogs};
 use is_executable::IsExecutable;
 use std::time::Duration;
 use crossbeam_channel::{select, tick};
 use std::process::Stdio;
 use std::io::{BufRead, BufReader};
 use std::thread;
+use sysinfo::System;
+use procfs::process::{all_processes, Process};
 
-pub fn execute_suricata<'a>(suriconf: & Suriconf, vec_of_sur_cmd: &mut Vec<&str>, logs: &mut CreatedLogs) -> Option<bool>{
+// TODO predelat unwrapy
+
+pub fn execute_suricata<'a>(suriconf: & Suriconf, vec_of_sur_cmd: &mut Vec<&str>, logs: &mut CreatedLogs) -> Option<SystemVar> {
+    let mut sys: SystemVar = Default::default();
 
     if cfg!(target_os = "windows") {
         Command::new("cmd")
@@ -37,7 +41,7 @@ pub fn execute_suricata<'a>(suriconf: & Suriconf, vec_of_sur_cmd: &mut Vec<&str>
 
         args.extend(vec_of_sur_cmd.iter().copied());
 
-        let ctrl_c_events = if let Ok(receiver) = structures::ctrl_channel() {
+        let ctrl_c_events = if let Ok(receiver) = ctrl_channel() {
             receiver
         } else {
             panic!("Cannot create Ctrl+C handler.");
@@ -62,21 +66,27 @@ pub fn execute_suricata<'a>(suriconf: & Suriconf, vec_of_sur_cmd: &mut Vec<&str>
         });
 
         let timeout = Duration::from_secs(suriconf.preconf_time);
-        println!("{}", suriconf.preconf_time);
         let start = std::time::Instant::now();
         let ticks = tick(Duration::from_millis(100));
+        let cpu_usage_ticks = tick(Duration::from_secs(FLOW_WINDOW));
 
+        let suri_pid = check_process_name_for_suricata_main().expect("Unable to get Suricata-Main.");
 
         loop {
             select! {
+                recv(cpu_usage_ticks) -> _ => {
+                    get_cpu_usage(&mut sys);
+                }
+
                 recv(ticks) -> _ => {
 
                     if start.elapsed() >= timeout {
+                        get_cores_with_threads(suri_pid, &mut sys);
                         kill_suricata(&mut child);
                         break;
                     }
 
-                    if let Ok(Some(status)) = child.try_wait() {
+                    if let Ok(Some(_)) = child.try_wait() {
                         break;
                     }
                 }
@@ -84,12 +94,56 @@ pub fn execute_suricata<'a>(suriconf: & Suriconf, vec_of_sur_cmd: &mut Vec<&str>
                 recv(ctrl_c_events) -> _ => {
                     println!("Ctrl+C pressed.");
                     kill_suricata(&mut child);
-                    return Some(false);
+                    return None;
                 }
             }
         }
     }
-    Some(true)
+    Some(sys)
+}
+
+pub fn get_cpu_usage(sys: &mut SystemVar) {
+        sys.sys.refresh_cpu_usage();
+
+        for cpu in sys.sys.cpus() {
+            let core_id: u32 = cpu.name()[3..].parse().unwrap();
+            if let Some (thread) = sys.threads.iter_mut().find(|t| t.core_id == core_id){
+                thread.cpu_usage.push(cpu.cpu_usage())
+            }
+            else {
+                sys.threads.push(Thread {name: vec![], core_id, cpu_usage: vec![cpu.cpu_usage()]});
+            }
+        }
+}
+
+fn check_process_name_for_suricata_main() -> Option<i32> {
+    for _ in 0..10 {
+        for prc in all_processes().expect("Unable to get all processes.") {
+            let process: Process;
+            match  prc {
+                Ok(prc) => {process = prc}
+                Err(e) => {continue}
+            }
+
+            if process.stat().expect("Unable to find stats about process.").comm == "Suricata-Main" {
+                return Some(process.pid);
+            }
+        }
+        thread::sleep(Duration::from_millis(100));
+    }
+    None
+}
+fn get_cores_with_threads(suri_pid: i32, sys: &mut SystemVar) {
+    let proc = Process::new(suri_pid).unwrap();
+    let stat = proc.stat().unwrap();
+    let tasks = proc.tasks().unwrap();
+
+    for task in tasks {
+        let stat = task.unwrap().stat().unwrap();
+        if let Some (thread) = sys.threads.iter_mut().find(|t| t.core_id ==  stat.processor.unwrap() as u32) {
+            thread.name.push(stat.comm);
+        }
+    }
 }
 
 pub fn kill_suricata(child: &mut Child) {
