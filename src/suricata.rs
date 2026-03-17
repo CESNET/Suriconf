@@ -129,7 +129,7 @@ fn check_process_name_for_suricata_main() -> Option<i32> {
             let process: Process;
             match  prc {
                 Ok(prc) => {process = prc}
-                Err(e) => {continue}
+                Err(_) => {continue}
             }
 
             if process.stat().expect("Unable to find stats about process.").comm == "Suricata-Main" {
@@ -170,8 +170,13 @@ pub fn kill_suricata(child: &mut Child) {
 
         if end_start.elapsed() >=  end_timeout {
             println!("Still alive, killing pid {}.", pid);
-            child.kill().expect("Unable to kill Suricata.");
-            break;
+            Command::new("sudo")
+                .arg("pkill")
+                .arg("-9")
+                .arg("Suricata-Main")
+                .status()
+                .expect("Unable to pkill Suricata-Main.");
+            break
         }
         thread::sleep(Duration::from_millis(100));
     }
