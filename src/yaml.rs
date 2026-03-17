@@ -3,13 +3,24 @@ use std::io::{Write, BufWriter, BufReader};
 use std::path::{PathBuf};
 use serde_yaml_ng::Value;
 use walkdir::WalkDir;
-use crate::argument::{Mode, Commands, Args};
+use crate::argument::{Commands, Args};
+use crate::structures::{Analysis, CaptureMode, JsonVar, Keys, Mode, Threads};
+use byte_unit::Byte;
+use crate::{MANAGER_START, RECYCLER_START};
 
 pub fn open_yaml(file: &PathBuf) -> Result<Value, Box<dyn std::error::Error>> {
     let file = File::open(file)?;
     let reader = BufReader::new(file);
     let text: Value = serde_yaml_ng::from_reader(reader)?;
     Ok(text)
+}
+
+pub fn open_yaml_with_comments(file: &PathBuf) {
+    todo!()
+}
+
+pub fn yaml_to_json(yaml: Value) -> serde_json::Value {
+    serde_json::to_value(yaml).expect("Unable to transform yaml to json.")
 }
 
 pub fn close_yaml(yaml: &Value, file: &PathBuf) -> Result<(), Box<dyn std::error::Error>> {
@@ -42,7 +53,93 @@ enum EveLogType {
     Stats
 }
 
-pub fn create_json_for_logging(enabled: bool, stats: EveLogType)-> Result<Value, Box<dyn std::error::Error>> {
+#[derive(Debug, PartialEq, Eq)]
+enum CPUSetting  {
+    RCMGR,
+    WKR,
+    ALL
+}
+
+pub fn check_set_cpu_affinity(suricata_string: &mut Value, suriconf: &Suriconf, json_var: &mut JsonVar) -> Result<(), String> {
+    let threading =suricata_string.get_mut("threading").ok_or("Unable to get threading section.")?;
+    // TODO tady nastavit flow_threads
+    let change = if suriconf.modules.contains(&"flow".to_string()) && (suriconf.modules.contains(&"cpu_affinity".to_string()) || suriconf.modules.contains(&"test_cpu_affinity".to_string())) {
+        CPUSetting::ALL
+    } else if suriconf.modules.contains(&"flow".to_string()) {
+        CPUSetting::RCMGR
+    } else if suriconf.modules.contains(&"cpu_affinity".to_string()) || suriconf.modules.contains(&"test_cpu_affinity".to_string()) {
+        CPUSetting::WKR
+    } else {
+        return Ok(());
+    };
+
+    let set_cpu_affinity = threading.get_mut("set-cpu-affinity").ok_or("Unable to parse set-cpu-affinity.")?;
+    if set_cpu_affinity == "no" {
+        *set_cpu_affinity = Value::String("yes".to_string());
+    }
+
+    if change == CPUSetting::ALL || change == CPUSetting::RCMGR {
+        let management_set = threading.get_mut("cpu-affinity").and_then(|m| m.get_mut("management-cpu-set")).ok_or("Unable to parse management-cpu-set.")?;
+        assert!(suriconf.max_cpu_usage_vec.len() >=  (RECYCLER_START+ MANAGER_START) as usize, "cpu_set vector provides only one core.");
+        let management_threads: Vec<Value> =suriconf.max_cpu_usage_vec.get(0..(RECYCLER_START+MANAGER_START) as  usize).ok_or("Unable to set manager thread.")?
+        .iter().map(|&x| Value::from(x)).collect();
+        let cpus = management_set.get_mut("cpu").ok_or("Unable to get cpus for management-cpu-set.")?;
+        *cpus = Value::Sequence(management_threads);
+    }
+
+    if change == CPUSetting::ALL || change == CPUSetting::WKR {
+        let workers = if change == CPUSetting::WKR  {
+            suriconf.max_cpu_usage_vec.clone()
+        }
+        else {
+            suriconf.max_cpu_usage_vec.get((RECYCLER_START+MANAGER_START) as usize..).map(|v| v.to_vec()).ok_or("Unable to parse cpu_set vector.")?
+        };
+
+        let worker_set = threading.get_mut("cpu-affinity").and_then(|w| w.get_mut("worker-cpu-set")).ok_or("Unable to parse worker-cpu-set.")?;
+        let interface_str = format!(r#"
+                - interface: {}
+                  cpu: {:?}
+                  mode: "exclusive"
+                  prio:
+                    high: [ "all" ]
+                    "#, suriconf.interface.as_str(), workers);
+
+        if let Some(interface_specific) = worker_set.get_mut("interface-specific-cpu-set") {
+            let sequence = interface_specific.as_sequence_mut().ok_or("Unable to get interface sequence.")?;
+            let interface_val = sequence.iter_mut().find(|v| { v.as_mapping().and_then(|m| m.get("interface")).and_then(|i| i.as_str()) == Some(suriconf.interface.as_str()) });
+
+
+            let mut interface_new_val: Value = serde_yaml_ng::from_str(&interface_str)
+                .map_err(|e| format!("{e}"))?;
+
+            let interface_new_val = interface_new_val.as_sequence_mut().ok_or("Not a sequence.")?.remove(0);;
+
+            match interface_val {
+                None => {
+                    sequence.push(interface_new_val);
+                }
+                Some(interface_val) => {
+                    *interface_val = interface_new_val;
+                }
+            }
+        }
+        else {
+            let interface_new_val: Value = serde_yaml_ng::from_str(&interface_str).map_err(|e| format!("{e}"))?;
+            let worker_set = worker_set.as_mapping_mut().ok_or("Not a Mapping.")?;
+            worker_set.insert(Value::String("interface-specific-cpu-set".to_string()), interface_new_val);
+        }
+
+        let interface_index = worker_set.get_mut("interface-specific-cpu-set").ok_or("Unable to parse interface-specific-cpu-set.")?.as_sequence_mut().ok_or("Unable to get interface sequence.")?
+            .iter_mut().position(|v| v["interface"] == suriconf.interface.as_str()).ok_or("Unable to find interface.")?;
+        json_var.var_index.insert(
+            Keys::wrk_cpu_set,
+            serde_json::Value::String(interface_index.to_string())
+        );
+    }
+    Ok(())
+}
+
+fn create_json_for_logging(enabled: bool, stats: EveLogType)-> Result<Value, Box<dyn std::error::Error>> {
     let required;
     match stats {
          EveLogType::Flow => {
@@ -56,7 +153,7 @@ pub fn create_json_for_logging(enabled: bool, stats: EveLogType)-> Result<Value,
                         totals: yes
                         threads: yes
                         deltas: no
-                        null-values: false
+                        null-values: true
                 "#,
                 if enabled { "yes" } else { "no" },
                  );
@@ -79,7 +176,7 @@ pub fn create_json_for_logging(enabled: bool, stats: EveLogType)-> Result<Value,
     Ok(required)
 }
 
-pub fn check_enable_stats_log(suricata_string: &mut Value, vec_of_sur_cmd: &mut Vec<&str>) -> Result<(), String> {
+pub fn check_enable_stats_log(suricata_string: &mut Value) -> Result<(), String> {
     if let Some(stats) = suricata_string.get_mut("stats") {
 
         let result = enable_stats(stats);
@@ -123,28 +220,30 @@ pub fn check_enable_stats_log(suricata_string: &mut Value, vec_of_sur_cmd: &mut 
                         Err(e) => return Err(e.to_string()),
                     }
                 }
-                return Ok(());
-
-            }
-        Err(String::from("Unable to enable stats.json."))
+        }
+        else {
+            return Err(String::from("Unable to enable stats.json."))
+        }
     }
     else {
-        Err(String::from("Unable to parse Suricata configuration file."))
+        return Err(String::from("Unable to parse Suricata configuration file."))
     }
+    Ok(())
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct Suriconf {
     pub suri_configuration: PathBuf,
     pub suricata_bin: PathBuf,
     pub log_dir: PathBuf,
     pub preconf_time: u64,
+    pub analysis: Analysis,
     pub mode: Mode,
     pub modules: Vec<String>,
     pub interface: String,
-    pub capture_mode: String,
-    pub max_memory_usage: f64,
-    pub max_cpu_usage: u64
+    pub capture_mode: CaptureMode,
+    pub max_memory_usage: u64,
+    pub max_cpu_usage_vec: Vec<u64>
 }
 
 impl Suriconf {
@@ -159,18 +258,7 @@ impl Suriconf {
     }
 
     pub fn init_suriconf_structure() -> Self {
-        Self {
-            suri_configuration: PathBuf::new(),
-            suricata_bin: PathBuf::new(),
-            log_dir: PathBuf::new(),
-            preconf_time: 0,
-            mode: Mode::Suggestion,
-            modules: vec![],
-            interface: String::new(),
-            capture_mode: String::new(),
-            max_memory_usage: 0.0,
-            max_cpu_usage: 0,
-        }
+        Self::default()
     }
     pub fn create_suriconf_structure(&mut self, args: &Args, suriconf_string: &Value)  {
         self.suri_configuration = match &args.suricata_config {
@@ -216,6 +304,7 @@ impl Suriconf {
                 self.find_preconf_time(suriconf_string).expect("Unable to parse time for preconfiguration.")
             };
 
+
         self.interface = if let Some(Commands::Var { interface: Some(interface), .. }) = &args.cmd {
             interface.clone()
         } else {
@@ -234,10 +323,10 @@ impl Suriconf {
             self.find_max_memory_usage(suriconf_string).expect("Unable to parse max memory usage.")
         };
 
-        self.max_cpu_usage = if let Some(Commands::Var { max_cpu_usage: Some(max_cpu_usage), .. }) = &args.cmd {
-            *max_cpu_usage
-        } else {
-            self.find_max_cpu_usage(suriconf_string).expect("Unable to parse max cpu usage.")
+        self.max_cpu_usage_vec = if let Some(Commands::Var { max_cpu_usage_vec: Some(max_cpu_usage_vec), .. }) = &args.cmd {
+            max_cpu_usage_vec.clone()
+        }  else {
+            self.find_max_cpu_usage_vec(suriconf_string).expect("Unable to parse max cpu usage vector.")
         };
     }
     pub fn find_suri_configuration(&self, text: &Value) -> Option<PathBuf> {
@@ -309,6 +398,15 @@ impl Suriconf {
         text.get("preconf-time").and_then(|t| t.as_u64())
     }
 
+    pub fn find_analysis(&self, text: &Value) -> Option<Analysis> {
+        text.get("analysis").and_then(|a| a.as_str())
+            .and_then(|a| match a {
+            "static" => Some(Analysis::Static),
+            "dynamic" => Some(Analysis::Dynamic),
+            _ => None,
+        })
+    }
+
     pub fn find_interface(&self, text: &Value) -> Option<String> {
         text.get("variables")
             .and_then(|c| c.get("interface"))
@@ -316,32 +414,41 @@ impl Suriconf {
             .map(|s| s.to_string())
     }
 
-    pub fn find_capture_mode(&self, text: &Value) -> Option<String> {
+    pub fn find_capture_mode(&self, text: &Value) -> Option<CaptureMode> {
         text.get("variables")
             .and_then(|c| c.get("capture_mode"))
-            .and_then(|c| c.as_str())
-            .map(|s| s.to_string())
+            .and_then(|c| c.as_str()).and_then(|a| match a {
+            "dpdk" => Some(CaptureMode::DPDK),
+            "af_packet" => Some(CaptureMode::AF_PACKET),
+            _ => None
+        })
+
     }
 
-    pub fn find_max_memory_usage(&self, text: &Value) -> Option<f64> {
-        let mut max_memory_usage_iter = text.get("variables")
+    pub fn find_max_memory_usage(&self, text: &Value) -> Option<u64> {
+        let max_memory_usage = text.get("variables")
             .and_then(|c| c.get("max_memory_usage"))
-            .and_then(|c| c.as_str())?.split(" ");
+            .and_then(|c| c.as_str())?;
 
-        let number: f64 = max_memory_usage_iter.next()?.parse::<f64>().ok()?;
-        let unit =  max_memory_usage_iter.next()?;
-        match unit  {
-            "GiB" => {Some(1_024f64 * 1_024f64 * 1_024f64 * number)},
-            "MiB" => {Some(1_024f64 * 1_024f64 * number)},
-            "KiB" => {Some(1_024f64 * number)},
-            "B" => {Some(number)},
-            _ => None // TODO some crate?
-        }
+        let byte: Option<u64> = Byte::parse_str(max_memory_usage, true)
+            .ok()
+            .map(|b| b.as_u64());
+        byte
+
     }
 
-    pub fn find_max_cpu_usage(&self, text: &Value)  -> Option<u64>{
-        text.get("variables")
-            .and_then(|c| c.get("max_cpu_usage"))
-            .and_then(|c| c.as_u64())
+    pub fn find_max_cpu_usage_vec(&self, text: &Value)  -> Option<Vec<u64>>{
+        let mut vec_cpus: Vec<u64> = Vec::new();
+        match text.get("variables")
+            .and_then(|c| c.get("max_cpu_usage_vec"))
+            .and_then(|v| v.as_sequence()) {
+            Some(vec_cpus_value ) => {
+                for cpu in vec_cpus_value {
+                     vec_cpus.push(cpu.as_u64().expect("Unable to convert cpu_set to vector."))
+                }
+            },
+            None => {return None}
+        }
+        Some(vec_cpus)
     }
 }

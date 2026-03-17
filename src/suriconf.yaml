@@ -6,7 +6,8 @@ suriconf-version: 1.0
 suri-configuration: suricata.yaml
 suricata-bin: /usr/bin/suricata
 log-dir: /var/log/suricata/
-preconf-time: 5 # in seconds
+preconf-time: 360 # in seconds
+analysis: static # static/dynamic 
 
 mode:
   modify:
@@ -17,16 +18,16 @@ mode:
 
 modules:
   - name: test_cpu_affinity
-    enabled: true
+    enabled: false
 
   - name: memory_usage
     enabled: false
 
-  - name: set_flow
-    enabled: false
+  - name: flow
+    enabled: true
 
 variables:
   interface: wlan0
-  capture_mode: dpdk
+  capture_mode: af_packet # dpdk
   max_memory_usage: 10 KiB #there has to be space
-  max_cpu_usage: 6
+  max_cpu_usage_vec: [7, 8, 9, 10, 0, 1, 2, 3, 4, 5, 6 ]

@@ -63,10 +63,10 @@ default-log-dir: /var/log/suricata/
 
 # Global stats configuration
 stats:
-  enabled: no
+  enabled: yes
   # The interval field (in seconds) controls the interval at
   # which stats are updated in the log.
-  interval: 8
+  interval: 5
   # Add decode events to stats.
   #decoder-events: true
   # Decoder event prefix in stats. Has been 'decoder' before, but that leads
@@ -469,7 +469,7 @@ outputs:
 
   # Stats.log contains data from various counters of the Suricata engine.
   - stats:
-      enabled: no
+      enabled: yes
       filename: stats.log
       append: yes       # append to file (yes) or overwrite it (no)
       totals: yes       # stats for all threads merged together
@@ -1538,8 +1538,8 @@ flow:
   hash-size: 65536
   prealloc: 10000
   emergency-recovery: 30
-  #managers: 1 # default to one flow manager
-  #recyclers: 1 # default to one flow recycler thread
+  managers: 1 # default to one flow manager
+  recyclers: 1 # default to one flow recycler thread
   # Track flows and count them as elephant flow if they exceed the rate defined
   # by the byte count per interval configured below.
   #rate-tracking:
@@ -1881,7 +1881,8 @@ threading:
   #
   cpu-affinity:
     management-cpu-set:
-      cpu: [ 0 ]  # include only these CPUs in affinity settings
+      cpu: [ 7, 8, ]  # include only these CPUs in affinity settings
+      mode: "exclusive"
     receive-cpu-set:
       cpu: [ 0 ]  # include only these CPUs in affinity settings
       # interface-specific-cpu-set:
@@ -1905,6 +1906,12 @@ threading:
       interface-specific-cpu-set:
         - interface: "enp4s0f0" # 0000:3b:00.0 # net_bonding0 # ens1f0
           cpu: [ 1,3,5,7,9 ]
+          mode: "exclusive"
+          prio:
+            high: [ "all" ]
+            default: "medium"
+        - interface: "wlan0" # 0000:3b:00.0 # net_bonding0 # ens1f0
+          cpu: [ 0, 1, 2, 3, 4, 5, 6 ]
           mode: "exclusive"
           prio:
             high: [ "all" ]
