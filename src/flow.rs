@@ -515,6 +515,10 @@ impl FlowModule {
         for record in recycled_avg.iter() {
             counter += 1;
 
+            if self.debug {
+                println!("before queue_size: {}, record: {record}, counter: {counter}, sum: {sum}",  record * counter - sum);
+            }
+
             let queue_size = record * counter - sum;
 
             if self.debug {

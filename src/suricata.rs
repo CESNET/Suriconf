@@ -153,9 +153,10 @@ fn get_cores_with_threads(suri_pid: i32, sys: &mut SystemVar) {
 }
 
 pub fn kill_suricata(child: &mut Child) {
-    let end_timeout = Duration::from_secs(10);
+    let end_timeout = Duration::from_secs(30);
     let pid = child.id();
-    Command::new("kill")
+    Command::new("sudo")
+    .arg("kill")
     .arg("-TERM")
     .arg(pid.to_string())
     .status()
@@ -172,7 +173,7 @@ pub fn kill_suricata(child: &mut Child) {
             println!("Still alive, killing pid {}.", pid);
             Command::new("sudo")
                 .arg("pkill")
-                .arg("-9")
+                .arg("-SIGKILL")
                 .arg("Suricata-Main")
                 .status()
                 .expect("Unable to pkill Suricata-Main.");
