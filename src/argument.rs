@@ -16,7 +16,7 @@ pub struct Args {
     pub suriconf_config: PathBuf,
 
     /// Specify Suriconf configuration mode 
-    #[clap(short='m', long="mode", value_enum)]
+    #[clap(short='m', long, value_enum)]
     pub mode: Option<Mode>,
 
     /// Select modules with which Suriconf will run
@@ -25,6 +25,10 @@ pub struct Args {
 
     #[command(subcommand)]
     pub cmd: Option<Commands>,
+
+    /// Activate debug mode in Suriconf
+    #[clap(short='v', long)]
+    pub verbose: bool,
 }
 
 
@@ -45,7 +49,7 @@ pub enum Commands {
         #[clap(short='t', long="time")]
         preconf_time: Option<u64>,
 
-        #[clap(short='a', long="analysis")]
+        #[clap(short='a', long)]
         analysis: Option<Analysis>
     },
 
@@ -68,4 +72,3 @@ pub enum Commands {
         max_cpu_usage_vec: Option<Vec<u64>>,
     }
 }
-// TODO check arguments

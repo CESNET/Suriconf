@@ -3,7 +3,7 @@ use std::process::{Child, Command};
 use crate::yaml::Suriconf;
 use crate::{json, FLOW_WINDOW};
 use crate::json::{Preconfiguration};
-use crate::structures::{Thread, SystemVar, ctrl_channel, CreatedLogs};
+use crate::structures::{Thread, SystemVar, ctrl_channel, CreatedLogs, CaptureMode};
 use is_executable::IsExecutable;
 use std::time::Duration;
 use crossbeam_channel::{select, tick};
@@ -13,10 +13,11 @@ use std::thread;
 use sysinfo::System;
 use procfs::process::{all_processes, Process};
 
-// TODO predelat unwrapy
-
-pub fn execute_suricata<'a>(suriconf: & Suriconf, vec_of_sur_cmd: &mut Vec<&str>, logs: &mut CreatedLogs) -> Option<SystemVar> {
+pub fn execute_suricata<'a>(suriconf: &Suriconf, logs: &mut CreatedLogs) -> Option<SystemVar> {
     let mut sys: SystemVar = Default::default();
+
+    let mut vec_of_sur_cmd: Vec<String> = vec![];
+    get_capture_mode(suriconf, &mut vec_of_sur_cmd);
 
     if cfg!(target_os = "windows") {
         Command::new("cmd")
@@ -35,11 +36,9 @@ pub fn execute_suricata<'a>(suriconf: & Suriconf, vec_of_sur_cmd: &mut Vec<&str>
             &logs.suri_configuration.to_str()?,
             "-S",
             "/dev/null",
-            "-i",
-            &suriconf.interface
         ];
 
-        args.extend(vec_of_sur_cmd.iter().copied());
+        args.extend(vec_of_sur_cmd.iter().map(|s| s.as_str()));
 
         let ctrl_c_events = if let Ok(receiver) = ctrl_channel() {
             receiver
@@ -102,11 +101,19 @@ pub fn execute_suricata<'a>(suriconf: & Suriconf, vec_of_sur_cmd: &mut Vec<&str>
     Some(sys)
 }
 
+pub fn get_capture_mode(suriconf: &Suriconf, vec_of_sur_cmd: &mut Vec<String>) {
+    vec_of_sur_cmd.push(
+        match suriconf.capture_mode {
+            CaptureMode::AF_PACKET => {format!("--af-packet={}", suriconf.interface)},
+            CaptureMode::DPDK => {panic!("NOT IMPLEMENTED")}
+        });
+}
+
 pub fn get_cpu_usage(sys: &mut SystemVar) {
         sys.sys.refresh_cpu_usage();
 
         for cpu in sys.sys.cpus() {
-            let core_id: u32 = cpu.name()[3..].parse().unwrap();
+            let core_id: u32 = cpu.name()[3..].parse().expect("Unable to get cpu name.");
             if let Some (thread) = sys.threads.iter_mut().find(|t| t.core_id == core_id){
                 thread.cpu_usage.push(cpu.cpu_usage())
             }
@@ -134,13 +141,12 @@ fn check_process_name_for_suricata_main() -> Option<i32> {
     None
 }
 fn get_cores_with_threads(suri_pid: i32, sys: &mut SystemVar) {
-    let proc = Process::new(suri_pid).unwrap();
-    let stat = proc.stat().unwrap();
-    let tasks = proc.tasks().unwrap();
+    let proc = Process::new(suri_pid).expect("Unable to create process.");
+    let tasks = proc.tasks().expect("Unable to get process tasks.");
 
     for task in tasks {
-        let stat = task.unwrap().stat().unwrap();
-        if let Some (thread) = sys.threads.iter_mut().find(|t| t.core_id ==  stat.processor.unwrap() as u32) {
+        let stat = task.expect("Unable to get task.").stat().expect("Unable to get stat.");
+        if let Some (thread) = sys.threads.iter_mut().find(|t| t.core_id ==  stat.processor.expect("Unable to get specific core.") as u32) {
             thread.name.push(stat.comm);
         }
     }

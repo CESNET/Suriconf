@@ -21,9 +21,8 @@ pub enum Reason {
     shutdown,
     forced,
     emergency,
-    tcp_reuse
+    tcp_reuse // TODO, in future think about tcp_reuse
 }
-// TODO, in future think about tcp_reuse
 
 #[derive(Debug, Clone, ValueEnum)]
 pub enum CaptureMode {
@@ -108,19 +107,28 @@ pub struct JsonVar {
 
 pub trait Module {
 
-    fn new(analysis: &Analysis) -> Self where Self: Sized;
+    fn new(analysis: &Analysis, debug: bool) -> Self where Self: Sized;
 
     fn questions(&self) -> &HashMap<Keys, Value>;
     fn init_questions(&self) -> Vec<Keys> {
         self.questions().keys().copied().collect()
     }
     fn main(&mut self, answers: &Vec<Answer<'_>>) -> Vec<Change>;
+
+    fn not_enough_memory(&mut self, answers: &Vec<Answer<'_>>) -> bool {
+        answers.iter().find(|a| a.key == &Keys::max_memory_usage).expect("Unable to get max max_memory_usage.").value.as_u64().expect("Unable to transform max_memory_usage to u64.");
+        // TODO, modul v sobe musi obsahovat vsechny dotazy
+        false
+    }
+
+    fn memcap_pressure(&mut self, answers: &Vec<Answer<'_>>) {
+        todo!()
+    }
 }
 
-pub fn create_module(name: &str, analysis: &Analysis) -> Box<dyn Module> {
+pub fn create_module(name: &str, analysis: &Analysis, debug: bool) -> Box<dyn Module> {
     match name {
-        "flow" => Box::new(FlowModule::new(analysis)),
-        "test_cpu_affinity" => Box::new(FlowModule::new(analysis)), // TODO tady to nepatri, ale rust nepusti s todo
+        "flow" => Box::new(FlowModule::new(analysis, debug)),
         _ => panic!("Unknown module."),
     }
 }
@@ -135,6 +143,7 @@ pub struct CreatedLogs {
 pub enum Keys { // JUST FOR FLOW
     max_memory_usage,
     wrk_cpu_set,
+    max_cpu_usage_vec,
     threads_stat,
     uptime,
     memcap_pressure,
@@ -193,6 +202,7 @@ impl Keys {
         match key_str {
             "max_memory_usage" => Keys::max_memory_usage,
             "wrk_cpu_set" => Keys::wrk_cpu_set,
+            "max_cpu_usage_vec" => Keys::max_cpu_usage_vec, 
             "threads_stat" => Keys::threads_stat,
             "uptime" => Keys::uptime,
             "memcap_pressure" => Keys::memcap_pressure,

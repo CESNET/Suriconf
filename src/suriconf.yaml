@@ -18,7 +18,7 @@ mode:
 
 modules:
   - name: test_cpu_affinity
-    enabled: true
+    enabled: false
 
   - name: memory_usage
     enabled: false
@@ -28,6 +28,6 @@ modules:
 
 variables:
   interface: wlan0
-  capture_mode: dpdk
+  capture_mode: af_packet # dpdk
   max_memory_usage: 10 KiB #there has to be space
   max_cpu_usage_vec: [7, 8, 9, 10, 0, 1, 2, 3, 4, 5, 6 ]

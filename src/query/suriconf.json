@@ -2,6 +2,9 @@
   "questions": {
     "max_memory_usage": {
       "path_to_value": "/variables/max_memory_usage"
+    },
+    "max_cpu_usage_vec": {
+      "path_to_value": "/variables/max_cpu_usage_vec"
     }
   }
 }

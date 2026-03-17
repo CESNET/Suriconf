@@ -1,5 +1,4 @@
-use scirs2_core::ndarray::MultiSliceArg;
-use crate::structures::{Module, Keys, SuricataAgain, ModuleResult, RobRegression, Analysis, Thread, Answer, Change, Reason};
+use crate::structures::{Module, Keys, ModuleResult, RobRegression, Analysis, Thread, Answer, Change, Reason};
 use std::collections::HashMap;
 use serde_json::{Value};
 use std::collections::BTreeMap;
@@ -9,7 +8,8 @@ use crate::regression::{my_huber_regression, my_theil_sen_regression};
 #[derive(Debug)]
 pub struct FlowModule {
     pub questions: HashMap<Keys, Value>, // changed
-    pub flow_map: BTreeMap<u64, Flow>
+    pub flow_map: BTreeMap<u64, Flow>,
+    pub debug: bool
 }
 
 #[derive(Debug, Default)]
@@ -40,10 +40,10 @@ pub struct RecyclerUp {
 }
 
 impl Module for FlowModule {
-    fn new(analysis: &Analysis) -> Self {
+    fn new(analysis: &Analysis, debug: bool) -> Self {
         let keys = [
             Keys::max_memory_usage,
-            Keys::wrk_cpu_set,
+            Keys::max_cpu_usage_vec,
             Keys::threads_stat,
             Keys::uptime,
             Keys::flow_memcap,
@@ -97,7 +97,7 @@ impl Module for FlowModule {
                 .map(|k| (k, Value::Null))
                 .collect();
 
-        Self { questions, flow_map: BTreeMap::new() }
+        Self { questions, flow_map: BTreeMap::new(), debug }
     }
 
     fn questions(&self) -> &HashMap<Keys, Value> {
@@ -112,6 +112,11 @@ impl Module for FlowModule {
                 *self.questions.get_mut(&Keys::flow_managers).expect("Unable to get flow_managers from intern table.") = Value::Number(new_managers.into());
             },
             _ => {}
+        }
+
+        if self.debug {
+            println!("Minimal manager slope: {min_slope}.");
+            println!("Suricata max flow active: {}", self.get_suri_max_flow_active_stat(answers));
         }
 
         match self.get_recycler_count(answers) {
@@ -172,16 +177,19 @@ impl FlowModule {
     fn get_max_flow_active(&self) -> u64 {
         let mut counter: Counter = Default::default();
         for time in  self.flow_map.iter() {
-            counter.flow_active = time.1.flow_count;
+            counter.flow_active += time.1.flow_count;
             if counter.flow_active > counter.flow_max {
                 counter.flow_max = counter.flow_active;
             }
-    }
+        }
+        if self.debug {
+            println!("My flow max: {}", counter.flow_max);
+        }
         counter.flow_max as u64
     }
 
     fn get_suri_max_flow_active_stat(&self, answers: &Vec<Answer<'_>>) -> u64 {
-         answers.iter().find(|a| a.key == &Keys::flow_active).expect("Unable to get max.").value.as_array().and_then(|arr| arr.iter().filter_map(|v| v.as_u64()).max()).expect("Unable to get flow active maximum.")
+         answers.iter().find(|a| a.key == &Keys::flow_active).expect("Unable to get flow active maximum.").value.as_array().and_then(|arr| arr.iter().filter_map(|v| v.as_u64()).max()).expect("Unable to get flow active maximum.")
     }
 
     fn get_prealloc_stat(&self, answers: &Vec<Answer<'_>>) -> u64{
@@ -208,40 +216,51 @@ impl FlowModule {
 
     fn get_flow_hash_size(&mut self, answers: &Vec<Answer<'_>>) -> ModuleResult {
         let mut current_queues: BTreeMap<u64, i64> = BTreeMap::new(); // hash, count(cumulative)
-        let mut current_average_vec: Vec<i64> = Vec::new();
+        let mut current_average: i64 = 0;
         let mut counter: Counter = Default::default();
         let flow_hash_size= self.get_flow_hash_size_stat(answers);
 
         for time in  self.flow_map.iter() {
-            counter.flow_active = time.1.flow_count;
+            counter.flow_active += time.1.flow_count;
             if counter.flow_active > counter.flow_max {
                 counter.flow_max = counter.flow_active;
             }
             counter.counter+=1;
+
             for flow in &time.1.hashes {
                 let v = current_queues.entry(*flow.0).or_insert(0);
                 *v += *flow.1;
                 if (*v > counter.current_max) {
                     counter.current_max = *v;
                 }
-                current_average_vec.push(*v);
+            }
+
+            for (_, value) in &current_queues {
+                current_average += *value;
             }
 
             if counter.counter == FLOW_WINDOW as u32 {
-                let mut current_average: i64 = current_average_vec.iter().sum();
-                current_average /= current_average_vec.len() as i64;
-                if (current_average) >= MAX_AVG_RATIO {
-                    return ModuleResult::Up
+                current_average /= (flow_hash_size*FLOW_WINDOW as f64) as i64;
+
+                if self.debug {
+                    println!("flow_hash_size: {flow_hash_size}, current_row_average: {current_average}, current_row_max: {}", counter.current_max);
+                }
+
+                if counter.current_max != 0 {
+                    if (current_average/counter.current_max) >= MAX_AVG_RATIO {
+                        return ModuleResult::Up
+                    }
                 }
 
                 if self.get_load_factor(counter.flow_active, flow_hash_size) >= LOAD_FACTOR {
                     return ModuleResult::Up
                 }
 
-                current_average_vec.clear();
+                current_average = 0;
                 for (_, value) in &current_queues {
-                    current_average_vec.push(*value);
+                        current_average += *value;
                 }
+
                 counter.current_max = 0;
                 counter.counter = 0;
             }
@@ -280,6 +299,10 @@ impl FlowModule {
         let flow_mgr_full_hash_pass = answers.iter().find(|h| h.key == &Keys::flow_mgr_full_hash_pass).expect("Unable to get flow_mgr_full_hash_pass.").value
             .as_array().expect("Unable to create array from flow_mgr_full_hash_pass record.").iter().map(|v| v.as_f64().expect("Unable to transform flow_mgr_full_hash_pass u64.")).collect::<Vec<f64>>();
 
+        if self.debug {
+            println!("flow_mgr_full_hash_pass: {:?}", flow_mgr_full_hash_pass);
+        }
+
         let uptime = self.get_uptime_stat(answers);
         let num_elements = MIN_RUN / FLOW_WINDOW ;
 
@@ -295,6 +318,10 @@ impl FlowModule {
 
         let mgr_cpu_usages: Vec<Thread> = self.get_specific_cpu_usage(answers, "FM");
 
+        if self.debug {
+            println!("flow_mgr_full_result: {:?}, mgr_cpu_usages: {:?}",  flow_mgr_full_result, mgr_cpu_usages);
+        }
+
         let mut counter = 0;
         let mut sm_counter = 0;
         let mut avg_cpu_usage: Vec<f32> = Vec::new();
@@ -303,12 +330,11 @@ impl FlowModule {
         let mut slope_vector: Vec<f64> = Vec::new();
         let mut tmp_slope_vector: Vec<f64> = Vec::new();
 
-        // TODO refactor, duplicite with recycler (not changed because of testing and optimalization)
         loop {
 
             for i in 0..WINDOWS {
-                for rc_cpu_usage in &mgr_cpu_usages {
-                    let avg: f32 = rc_cpu_usage.cpu_usage[((counter*WINDOWS+i)*num_elements) as usize..(((counter*WINDOWS+1)+i)*num_elements) as usize]
+                for mgr_cpu_usage in &mgr_cpu_usages {
+                    let avg: f32 = mgr_cpu_usage.cpu_usage[((counter*WINDOWS+i)*num_elements) as usize..(((counter*WINDOWS+1)+i)*num_elements) as usize]
                         .iter().sum::<f32>() / (num_elements as f32);
                     avg_cpu_usage.push(avg);
                 }
@@ -361,14 +387,12 @@ impl FlowModule {
 
         if !slope_vector.is_empty() {
             let mgr_power = slope_vector.iter().min_by(|a, b| a.partial_cmp(b).unwrap()).expect("Unable to find mgr_power minimum.");
-            let managers = answers.iter().find(|h| h.key == &Keys::flow_managers).expect("Unable to get flow_managers.").value.as_f64().expect("Unable to transform flow_managers to u64.");
+            let managers = self.get_managers_stat(answers);
             let one_mgr_power = mgr_power/managers;
             let managers = (MANAGER_SLOPE/one_mgr_power).ceil() as u64;
             return (ModuleResult::Up, Some(managers));
         }
-
         (ModuleResult::Ok, None)
-
     }
 
     fn get_recycler_count(&self, answers: &Vec<Answer<'_>>) -> (ModuleResult, Option<u64>) {
@@ -457,7 +481,7 @@ impl FlowModule {
 
         if !slope_vector.is_empty() {
             let recycler_up = slope_vector.iter().max_by(|a, b| a.queue_growth.partial_cmp(&b.queue_growth).unwrap()).expect("Unable to find rc_power maximum.");
-            let recyclers = answers.iter().find(|h| h.key == &Keys::flow_recyclers).expect("Unable to get flow_managers.").value.as_f64().expect("Unable to transform flow_managers to f64.");
+            let recyclers = self.get_recyclers_stat(answers);
             let one_recycler_power = recyclers / recycler_up.now_recycled_avg;
             let has_to_clean = recycler_up.now_in_queue_avg*recycler_up.queue_growth;
             let recyclers = (has_to_clean / one_recycler_power).ceil() as u64;
@@ -467,9 +491,21 @@ impl FlowModule {
         (ModuleResult::Ok, None)
     }
 
+    fn get_recyclers_stat(&self, answers: &Vec<Answer<'_>>) -> f64 {
+         answers.iter().find(|h| h.key == &Keys::flow_recyclers).expect("Unable to get flow_managers.").value.as_f64().expect("Unable to transform flow_managers to f64.")
+    }
+
+    fn get_managers_stat(&self, answers: &Vec<Answer<'_>>) -> f64 {
+        answers.iter().find(|h| h.key == &Keys::flow_managers).expect("Unable to get flow_managers.").value.as_f64().expect("Unable to transform flow_managers to u64.")
+    }
+
     fn get_flows_in_queue(&self, answers: &Vec<Answer<'_>>) -> Vec<f64> {
         let recycled_avg = answers.iter().find(|h| h.key == &Keys::flow_rc_queue_avg).expect("Unable to get flow_rc_queue_avg.").value
             .as_array().expect("Unable to create array from flow_rc_queue_avg record.").iter().map(|a| a.as_u64().expect("Unable to transform flow_rc_queue_avg u64.")).collect::<Vec<u64>>();
+
+        if self.debug {
+            println!("recycled_avg: {:?}", recycled_avg);
+        }
 
         let mut in_queue: Vec<f64> = Vec::new();
 
@@ -480,6 +516,11 @@ impl FlowModule {
             counter += 1;
 
             let queue_size = record * counter - sum;
+
+            if self.debug {
+                println!("queue_size: {queue_size}.");
+            }
+
             sum += queue_size;
 
             in_queue.push(queue_size as f64);
@@ -560,7 +601,7 @@ impl FlowModule {
                             match reason {
                                 Reason::timeout | Reason::tcp_reuse | Reason::emergency   => {
                                     let timeout_manager_check = self.get_timeout_from_stats(answers, state, proto);
-                                    end += timeout_manager_check; // TODO tady by to chtelo pripocist i cas, co manager zkontrolovat flow_mgr_flows_timeout
+                                    end += timeout_manager_check + (1.0 / min_slope).ceil() as u64;
                                 },
                                 _ => {}
                             }
@@ -597,12 +638,37 @@ impl FlowModule {
         else {
             panic!("Unable to parse flows.");
         }
+
+        if self.debug {
+            println!("flow_map:{:?}", self.flow_map)
+        }
     }
 
     fn get_flow_memcap(&mut self, answers: &Vec<Answer<'_>>) -> f64 {
         let max_flow_active = self.get_suri_max_flow_active_stat(answers) as f64;
-        let wrk_cpu_set = answers.iter().find(|a| { a.key == &Keys::wrk_cpu_set}).expect("Unable to get workers cpu set.")
+        let mut wrk_cpu_set_len = answers.iter().find(|a| { a.key == &Keys::max_cpu_usage_vec}).expect("Unable to get workers cpu set.")
             .value.as_array().map(|a| a.len()).expect("Unable to compute the len of worker cpu set.") as f64;
+
+        let flow_recyclers =  self.questions.get_mut(&Keys::flow_recyclers).expect("Unable to get flow_recyclers from intern table.").clone();
+        let flow_managers = self.questions.get_mut(&Keys::flow_managers).expect("Unable to get flow_managers from intern table.").clone();
+        let mut management = 0.0;
+
+        if flow_recyclers == Value::Null {
+            management += answers.iter().find(|a| {a.key == &Keys::flow_recyclers}).expect("Unable to get flow_recyclers.").value.as_f64().expect("Unable to get  flow_recyclers as f64.");
+        }
+        else {
+            management += flow_recyclers.as_f64().expect("Unable to transform flow_recyclers to u64.")
+        }
+
+        if flow_managers == Value::Null {
+            management += answers.iter().find(|a| {a.key == &Keys::flow_managers}).expect("Unable to get flow_managers.").value.as_f64().expect("Unable to get  flow_managers as f64.");
+        }
+        else {
+            management += flow_managers.as_f64().expect("Unable to transform flow_managers to u64.")
+        }
+
+        wrk_cpu_set_len = wrk_cpu_set_len - management;
+
         let hash_size = answers.iter().find(|a| {a.key == &Keys::flow_hashsize}).expect("Unable to get hash size of Flow table.").value.as_f64().expect("Unable to get hash_size as f64.");
         let prealloc=
             match self.questions.get_mut(&Keys::flow_prealloc) {
@@ -617,6 +683,6 @@ impl FlowModule {
                 }
             };
 
-        hash_size*FLOW_BUCKET+(max_flow_active+prealloc*1.2+wrk_cpu_set*FLOW_LOCAL_THREAD_MAX)*FLOW_OBJECT
+        hash_size*FLOW_BUCKET+(max_flow_active+prealloc*1.2+wrk_cpu_set_len*FLOW_LOCAL_THREAD_MAX)*FLOW_OBJECT
     }
 }

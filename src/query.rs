@@ -2,9 +2,9 @@ use std::collections::HashMap;
 use std::path::{PathBuf};
 use crate::structures::{Keys, FileNames, create_module, JsonVar, Answer, Change};
 use strum::IntoEnumIterator;
-use crate::yaml::{open_yaml, Suriconf};
+use crate::yaml::{Suriconf};
 use serde_json::{Value};
-use crate::yaml;
+use crate::{yaml};
 use crate::json::{find_in_json_with_path_mut, find_in_json_with_path_ref, json_to_value, open_json, save_to_json};
 
 #[derive(Debug)]
@@ -15,6 +15,7 @@ pub struct Resources {
     pub preconfiguration: PathBuf,
     pub tables: Vec<FileQuestionStructure>,
     pub json_var: JsonVar, //changes in jsons
+    pub debug: bool
 }
 #[derive(Default, Debug)]
 pub struct Jsons {
@@ -98,14 +99,15 @@ pub struct QuestionPart {
     pub changed: bool
 }
 impl Resources {
-    pub fn new(suri_configuration: PathBuf, suriconf_struct: Suriconf, suriconf: PathBuf, preconfiguration: PathBuf, json_var: JsonVar) -> Self {
+    pub fn new(suri_configuration: PathBuf, suriconf_struct: Suriconf, suriconf: PathBuf, preconfiguration: PathBuf, json_var: JsonVar, debug: bool) -> Self {
         Self {
             suri_configuration,
             suriconf_struct,
             suriconf,
             preconfiguration,
             tables: Vec::new(),
-            json_var
+            json_var,
+            debug
         }
     }
 
@@ -131,7 +133,7 @@ impl Resources {
                     if let Some(Value::String(s)) = value.get("path_to_value") {
                      let key =
                         if key.as_str() == "prealloc" {
-                            Keys::new("flow_prealloc") // TODO tady budou kolize
+                            Keys::new("flow_prealloc") // TODO colisions
                         }else {
                             Keys::new(key)
                         };
@@ -178,7 +180,7 @@ impl Resources {
     }
 
     pub fn query_module(&mut self, module: &str, jsons: &mut Jsons) {
-        let mut module = create_module(module, &self.suriconf_struct.analysis);
+        let mut module = create_module(module, &self.suriconf_struct.analysis, self.debug);
         let questions: Vec<Keys> = module.init_questions();
         self.check_table_if_null(&questions, jsons);
         let answers = self.get_from_table(&questions);
@@ -187,7 +189,7 @@ impl Resources {
             self.change_in_table(changes);
         }
     }
-    pub fn check_table_if_null(&mut self, questions: &Vec<Keys>, jsons: &mut Jsons) { // TODO just for first run, for more runs, skip
+    pub fn check_table_if_null(&mut self, questions: &Vec<Keys>, jsons: &mut Jsons) { // just for first run
         let mut contains  = false;
         for question in questions {
             for table in  &mut self.tables {
@@ -245,13 +247,38 @@ impl Resources {
     }
 
     pub fn write_changes(&self, jsons: &mut Jsons) {
+        let mut change_management_set = false;
+        let mut change_management_count = 0;
         let suricata_table = self.tables.iter().find(|a| a.file_name == FileNames::suricata).expect("Unable to find Suricata table.");
         for question in &suricata_table.questions {
+            if matches!(question.0, Keys::flow_managers | Keys::flow_recyclers) {
+                change_management_count += question.1.value.as_u64().expect("Unable to get recycler or manager count as u64.")
+            }
             if question.1.changed {
+                if matches!(question.0, Keys::flow_managers | Keys::flow_recyclers) {
+                    change_management_set = true
+                }
                 let change = find_in_json_with_path_mut(&mut jsons.suricata, question.1.file_path.as_str());
                 *change = question.1.value.clone();
             }
         }
+        if change_management_set {
+            self.change_manager_cpu_set(&mut jsons.suricata, change_management_count);
+        }
+    }
+
+    pub fn change_manager_cpu_set(&self, file_value: &mut Value, change_management_count: u64) {
+
+        let management_set = file_value.get_mut("threading").expect("Unable to get threading section.")
+            .get_mut("cpu-affinity").and_then(|m| m.get_mut("management-cpu-set")).expect("Unable to parse management-cpu-set.");
+
+        assert!(self.suriconf_struct.max_cpu_usage_vec.len() >=  change_management_count as usize, "Cpu set is not enough for management threads.");
+
+        let management_threads: Vec<Value> = self.suriconf_struct.max_cpu_usage_vec.get(0..change_management_count as  usize).expect("Unable to set manager thread.")
+            .iter().map(|&x| Value::from(x)).collect();
+        let cpus = management_set.get_mut("cpu").expect("Unable to get cpus for management-cpu-set.");
+
+        *cpus = Value::Array(management_threads);
     }
 
     pub fn suggest_changes() {

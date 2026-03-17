@@ -129,7 +129,8 @@ pub fn check_set_cpu_affinity(suricata_string: &mut Value, suriconf: &Suriconf, 
             worker_set.insert(Value::String("interface-specific-cpu-set".to_string()), interface_new_val);
         }
 
-        let interface_index = worker_set.get_mut("interface-specific-cpu-set").ok_or("Unable to parse interface-specific-cpu-set.")?.as_sequence_mut().ok_or("Unable to get interface sequence.")?.iter_mut().position(|v| v["interface"] == suriconf.interface.as_str()).ok_or("Unable to find interface.")?;
+        let interface_index = worker_set.get_mut("interface-specific-cpu-set").ok_or("Unable to parse interface-specific-cpu-set.")?.as_sequence_mut().ok_or("Unable to get interface sequence.")?
+            .iter_mut().position(|v| v["interface"] == suriconf.interface.as_str()).ok_or("Unable to find interface.")?;
         json_var.var_index.insert(
             Keys::wrk_cpu_set,
             serde_json::Value::String(interface_index.to_string())
@@ -175,7 +176,7 @@ fn create_json_for_logging(enabled: bool, stats: EveLogType)-> Result<Value, Box
     Ok(required)
 }
 
-pub fn check_enable_stats_log(suricata_string: &mut Value, vec_of_sur_cmd: &mut Vec<&str>) -> Result<(), String> {
+pub fn check_enable_stats_log(suricata_string: &mut Value) -> Result<(), String> {
     if let Some(stats) = suricata_string.get_mut("stats") {
 
         let result = enable_stats(stats);
@@ -219,14 +220,15 @@ pub fn check_enable_stats_log(suricata_string: &mut Value, vec_of_sur_cmd: &mut 
                         Err(e) => return Err(e.to_string()),
                     }
                 }
-                return Ok(());
-
-            }
-        Err(String::from("Unable to enable stats.json."))
+        }
+        else {
+            return Err(String::from("Unable to enable stats.json."))
+        }
     }
     else {
-        Err(String::from("Unable to parse Suricata configuration file."))
+        return Err(String::from("Unable to parse Suricata configuration file."))
     }
+    Ok(())
 }
 
 #[derive(Debug, Default)]

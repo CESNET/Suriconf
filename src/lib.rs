@@ -25,8 +25,7 @@ static FLOW_LOCAL_THREAD_MAX: f64 = 200.0;
 
 static ROB_REGRESSION: RobRegression = RobRegression::Huber;
 
-static CPU_USAGE_MAX: f32 = 90.0;
+static CPU_USAGE_MAX: f32 = 95.0;
 static HUBER_THRESHOLD: f64 = 0.0;
 
-static MANAGER_SLOPE: f64 = 0.5;
-// once every 10 s, I have a measurement after 5s, the slope must be at least 0.5
+static MANAGER_SLOPE: f64 = 0.1;  // once every 10 s

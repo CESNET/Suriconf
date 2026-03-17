@@ -1,4 +1,4 @@
-use clap::{Parser};
+use clap::{arg, Parser};
 use suriconf::argument::Args;
 use suriconf::yaml;
 use suriconf::yaml::Suriconf;
@@ -29,10 +29,9 @@ fn main() {
         }
     };
 
-    let mut vec_of_sur_cmd: Vec<&str> = vec![]; // TODO
-    match yaml::check_enable_stats_log(&mut suricata_string, &mut vec_of_sur_cmd) {
+    match yaml::check_enable_stats_log(&mut suricata_string) {
         Err(e) => {
-            panic!("{e}"); // TODO NOT GOOD PRACTISE
+            panic!("{e}");
         },
         Ok(()) => {}
     }
@@ -55,7 +54,7 @@ fn main() {
     let mut logs = CreatedLogs::new(&suriconf.log_dir);
     yaml::close_yaml(&suricata_string, &logs.suri_configuration).unwrap();
 
-    let sys = if let Some(sys) = suricata::execute_suricata(&suriconf, &mut vec_of_sur_cmd, &mut logs) {
+    let sys = if let Some(sys) = suricata::execute_suricata(&suriconf, &mut logs) {
         if sys.threads.is_empty() {
             panic!("Unable to get data from Suricata.");
         }
@@ -74,7 +73,7 @@ fn main() {
     }
 
     // QUERY
-    let mut resources =  Resources::new(logs.suri_configuration, suriconf, args.suriconf_config, logs.preconfiguration, json_var);
+    let mut resources =  Resources::new(logs.suri_configuration, suriconf, args.suriconf_config, logs.preconfiguration, json_var, args.verbose);
     resources.main_query();
 }
 
