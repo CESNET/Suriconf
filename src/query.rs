@@ -162,7 +162,7 @@ impl Resources {
         }
 
         self.write_changes(&mut jsons);
-        match save_to_json(&jsons.suricata, &PathBuf::from("/home/keiahny/Projects/suricata-autoconfigurer/src/tmp/try.yaml")) {
+        match save_to_json(&jsons.suricata, &PathBuf::from("./tmp/try.yaml")) {
             Err(e) => {panic!("{e}");},
             Ok(()) => {}
         }

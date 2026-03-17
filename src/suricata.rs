@@ -33,7 +33,7 @@ pub fn execute_suricata<'a>(suriconf: & Suriconf, vec_of_sur_cmd: &mut Vec<&str>
             full_path,
             "-c",
             &logs.suri_configuration.to_str()?,
-            "-s",
+            "-S",
             "/dev/null",
             "-i",
             &suriconf.interface
