@@ -153,14 +153,13 @@ fn get_cores_with_threads(suri_pid: i32, sys: &mut SystemVar) {
 }
 
 pub fn kill_suricata(child: &mut Child) {
-    let end_timeout = Duration::from_secs(30);
+    let end_timeout = Duration::from_secs(10);
     let pid = child.id();
     Command::new("sudo")
-    .arg("kill")
-    .arg("-TERM")
-    .arg(pid.to_string())
+    .arg("pkill")
+    .arg("Suricata-Main")
     .status()
-    .expect("Unable to kill Suricata.");
+    .expect("Unable to pkill Suricata-Main (SIGTERM).");
 
     let end_start = std::time::Instant::now();
     loop {
@@ -176,7 +175,7 @@ pub fn kill_suricata(child: &mut Child) {
                 .arg("-SIGKILL")
                 .arg("Suricata-Main")
                 .status()
-                .expect("Unable to pkill Suricata-Main.");
+                .expect("Unable to pkill Suricata-Main (SIGKILL).");
             break
         }
         thread::sleep(Duration::from_millis(100));

@@ -251,8 +251,9 @@ impl Resources {
         let mut change_management_count = 0;
         let suricata_table = self.tables.iter().find(|a| a.file_name == FileNames::suricata).expect("Unable to find Suricata table.");
         for question in &suricata_table.questions {
-            if matches!(question.0, Keys::flow_managers | Keys::flow_recyclers) {
+            if matches!(question.0, Keys::flow_managers | Keys::flow_recyclers) && question.1.value != Value::Null {
                 change_management_count += question.1.value.as_u64().expect("Unable to get recycler or manager count as u64.")
+
             }
             if question.1.changed {
                 if matches!(question.0, Keys::flow_managers | Keys::flow_recyclers) {
