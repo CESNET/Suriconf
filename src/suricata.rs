@@ -129,7 +129,7 @@ fn check_process_name_for_suricata_main() -> Option<i32> {
             let process: Process;
             match  prc {
                 Ok(prc) => {process = prc}
-                Err(e) => {continue}
+                Err(_) => {continue}
             }
 
             if process.stat().expect("Unable to find stats about process.").comm == "Suricata-Main" {
@@ -155,11 +155,11 @@ fn get_cores_with_threads(suri_pid: i32, sys: &mut SystemVar) {
 pub fn kill_suricata(child: &mut Child) {
     let end_timeout = Duration::from_secs(10);
     let pid = child.id();
-    Command::new("kill")
-    .arg("-TERM")
-    .arg(pid.to_string())
+    Command::new("sudo")
+    .arg("pkill")
+    .arg("Suricata-Main")
     .status()
-    .expect("Unable to kill Suricata.");
+    .expect("Unable to pkill Suricata-Main (SIGTERM).");
 
     let end_start = std::time::Instant::now();
     loop {
@@ -170,8 +170,13 @@ pub fn kill_suricata(child: &mut Child) {
 
         if end_start.elapsed() >=  end_timeout {
             println!("Still alive, killing pid {}.", pid);
-            child.kill().expect("Unable to kill Suricata.");
-            break;
+            Command::new("sudo")
+                .arg("pkill")
+                .arg("-SIGKILL")
+                .arg("Suricata-Main")
+                .status()
+                .expect("Unable to pkill Suricata-Main (SIGKILL).");
+            break
         }
         thread::sleep(Duration::from_millis(100));
     }
