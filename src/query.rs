@@ -1,9 +1,12 @@
+use chrono::{DateTime, Utc};
 use std::collections::HashMap;
 use std::path::{PathBuf};
 use crate::structures::{Keys, FileNames, create_module, JsonVar, Answer, Change};
 use strum::IntoEnumIterator;
 use crate::yaml::{Suriconf};
 use serde_json::{Value};
+use std::fs;
+use std::time::SystemTime;
 use crate::{yaml};
 use crate::json::{find_in_json_with_path_mut, find_in_json_with_path_ref, json_to_value, open_json, save_to_json};
 
@@ -163,15 +166,26 @@ impl Resources {
             self.query_module(module.as_str(), &mut jsons);
         }
 
+        let system_time = SystemTime::now();
+        let datetime: DateTime<Utc> = system_time.into();
         self.write_changes(&mut jsons);
-        match save_to_json(&jsons.suricata, &PathBuf::from("./tmp/try.yaml")) {
-            Err(e) => {panic!("{e}");},
+
+        let mut suricata_result_path = PathBuf::from("./tmp");
+        if !suricata_result_path.exists() {
+            fs::create_dir_all(&suricata_result_path).expect("Unable to create tmp directory.");
+        }
+        suricata_result_path.push(format!("suricata_result{}.yaml", datetime.format("-%Y-%m-%d-%H:%M:%S")));
+
+        let suricata_result = yaml::json_to_yaml(jsons.suricata);
+        
+        match yaml::close_yaml(&suricata_result, &suricata_result_path) {
+            Err(e) => {panic!("{e}")},
             Ok(()) => {}
         }
     }
 
     pub fn sort_modules(&mut self) {
-        const ORDER: [&str; 4] = ["memory_usage", "flow", "test_cpu_affinity", "capture_mode"];
+        const ORDER: [&str; 5] = ["flow_threads", "cpu_affinity", "flow", "memory_usage", "capture_mode"];
         self.suriconf_struct.modules.sort_by_key(|m| {
             ORDER.iter()
                 .position(|&o| o == m)
@@ -264,11 +278,11 @@ impl Resources {
             }
         }
         if change_management_set {
-            self.change_manager_cpu_set(&mut jsons.suricata, change_management_count);
+            self.change_management_cpu_set(&mut jsons.suricata, change_management_count);
         }
     }
 
-    pub fn change_manager_cpu_set(&self, file_value: &mut Value, change_management_count: u64) {
+    pub fn change_management_cpu_set(&self, file_value: &mut Value, change_management_count: u64) {
 
         let management_set = file_value.get_mut("threading").expect("Unable to get threading section.")
             .get_mut("cpu-affinity").and_then(|m| m.get_mut("management-cpu-set")).expect("Unable to parse management-cpu-set.");

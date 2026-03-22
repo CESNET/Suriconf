@@ -24,12 +24,6 @@
     "flow_rc_recycled": {
       "path_to_value": "/flow/flow_rc_recycled"
     },
-    "flow_emerg_mode_over": {
-      "path_to_value": "/flow/flow_emerg_mode_over"
-    },
-    "flow_emerg_mode_entered": {
-      "path_to_value": "/flow/flow_emerg_mode_entered"
-    },
     "memcap_pressure": {
       "path_to_value": "/memcap_pressure"
     },

@@ -1,6 +1,6 @@
-
 use scirs2_core::ndarray::{Array1, Array2};
 use scirs2_stats::{huber_regression, theilslopes};
+
 pub fn  my_huber_regression(vector_values: Vec<f64>, uptime: u64, time_period: u64, num_elements: u64) -> Vec<f64> {
     let loops = uptime/(time_period*num_elements);
     let mut huber_reg_vec: Vec<f64> = Vec::new();

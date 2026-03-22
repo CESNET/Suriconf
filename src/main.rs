@@ -1,12 +1,11 @@
-use clap::{arg, Parser};
+use clap::{Parser};
 use suriconf::argument::Args;
 use suriconf::yaml;
-use suriconf::yaml::Suriconf;
+use suriconf::yaml::{Suriconf};
 use suriconf::json::Preconfiguration;
-use suriconf::structures::{CreatedLogs, JsonVar};
+use suriconf::structures::{CreatedLogs, JsonVar, SuricataAgain};
 use suriconf::suricata;
 use suriconf::query::Resources;
-
 #[allow(unused_variables)]
 fn main() {
 
@@ -19,7 +18,7 @@ fn main() {
         }
     };
 
-    let mut suriconf: Suriconf = yaml::Suriconf::init_suriconf_structure();
+    let mut suriconf: Suriconf = Suriconf::init_suriconf_structure();
     suriconf.create_suriconf_structure(&args, &suriconf_string);
 
     let mut suricata_string = match yaml::open_yaml(&suriconf.suri_configuration) {
@@ -54,13 +53,21 @@ fn main() {
     let mut logs = CreatedLogs::new(&suriconf.log_dir);
     yaml::close_yaml(&suricata_string, &logs.suri_configuration).unwrap();
 
-    let sys = if let Some(sys) = suricata::execute_suricata(&suriconf, &mut logs) {
-        if sys.threads.is_empty() {
-            panic!("Unable to get data from Suricata.");
+    let sys = loop {
+        let (sys, suricata_again) = match suricata::execute_suricata(&suriconf, &mut logs)  {
+            Some((sys, suricata_again)) => {
+                if sys.threads.is_empty() {
+                    panic!("Unable to get data from Suricata.");
+                }
+                (sys, suricata_again)
+            }
+            _ => {
+                return;
+            }
+        };
+        if suricata_again == SuricataAgain::Done {
+            break sys
         }
-        sys
-    } else {
-        return;
     };
 
     // PRECONFIGURATION

@@ -16,6 +16,9 @@ use strum_macros::{Display, EnumIter};
 use sysinfo::System;
 use crate::flow::FlowModule;
 use clap::{ValueEnum};
+use crate::flow_threads::FlowThreadsModule;
+use crate::module::Module;
+
 pub enum Reason {
     timeout,
     shutdown,
@@ -53,6 +56,11 @@ pub struct Answer<'a>{
     pub value: &'a Value
 }
 
+pub struct MemcapChange {
+    pub keys: Keys,
+    pub value: u64
+}
+
 pub struct Change {
     pub keys: Keys,
     pub value: Value
@@ -63,10 +71,14 @@ impl Change {
     }
 }
 
-#[derive(PartialEq, Eq)]
+#[derive(PartialEq, Eq, Debug)]
 pub enum SuricataAgain {
     Done,
     RunAgain
+}
+
+impl  Default for SuricataAgain {
+    fn default() -> Self { SuricataAgain::Done }
 }
 
 #[derive(PartialEq, Debug)]
@@ -104,30 +116,9 @@ pub struct Threads {
 pub struct JsonVar {
     pub var_index: HashMap<Keys, Value>
 }
-
-pub trait Module {
-
-    fn new(analysis: &Analysis, debug: bool) -> Self where Self: Sized;
-
-    fn questions(&self) -> &HashMap<Keys, Value>;
-    fn init_questions(&self) -> Vec<Keys> {
-        self.questions().keys().copied().collect()
-    }
-    fn main(&mut self, answers: &Vec<Answer<'_>>) -> Vec<Change>;
-
-    fn not_enough_memory(&mut self, answers: &Vec<Answer<'_>>) -> bool {
-        answers.iter().find(|a| a.key == &Keys::max_memory_usage).expect("Unable to get max max_memory_usage.").value.as_u64().expect("Unable to transform max_memory_usage to u64.");
-        // TODO, modul v sobe musi obsahovat vsechny dotazy
-        false
-    }
-
-    fn memcap_pressure(&mut self, answers: &Vec<Answer<'_>>) {
-        todo!()
-    }
-}
-
 pub fn create_module(name: &str, analysis: &Analysis, debug: bool) -> Box<dyn Module> {
     match name {
+        "flow_threads" =>  Box::new(FlowThreadsModule::new(analysis, debug)),
         "flow" => Box::new(FlowModule::new(analysis, debug)),
         _ => panic!("Unknown module."),
     }
@@ -148,7 +139,13 @@ pub enum Keys { // JUST FOR FLOW
     uptime,
     memcap_pressure,
     memcap_pressure_max,
+    defrag_memcap,
+    stream_memcap,
+    reassembly_memcap,
+    ippair_memcap,
+    host_memcap,
     flow_memcap,
+    max_pending_packets,
     flow_memuse,
     flow_active,
     flow_hashsize,
@@ -162,8 +159,6 @@ pub enum Keys { // JUST FOR FLOW
     flow_rc_queue_avg,
     flow_rc_recycled,
     flow_emergency_recovery,
-    flow_emerg_mode_entered,
-    flow_emerg_mode_over,
     flow_wrk_spare_sync_avg,
     flow_wrk_spare_sync_empty,
     flow_wrk_spare_sync_incomplete,
@@ -207,6 +202,12 @@ impl Keys {
             "uptime" => Keys::uptime,
             "memcap_pressure" => Keys::memcap_pressure,
             "memcap_pressure_max" => Keys::memcap_pressure_max,
+            "defrag_memcap" => Keys::defrag_memcap,
+            "stream_memcap" => Keys::stream_memcap,
+            "reassembly_memcap" => Keys::reassembly_memcap,
+            "ippair_memcap" => Keys::ippair_memcap,
+            "host_memcap" => Keys::host_memcap,
+            "max_pending_packets" => Keys::max_pending_packets,
             "flow_memcap" => Keys::flow_memcap,
             "flow_memuse" => Keys::flow_memuse,
             "flow_active" => Keys::flow_active,
@@ -221,8 +222,6 @@ impl Keys {
             "flow_rc_queue_avg" => Keys::flow_rc_queue_avg,
             "flow_rc_recycled" => Keys::flow_rc_recycled,
             "flow_emergency_recovery" => Keys::flow_emergency_recovery,
-            "flow_emerg_mode_entered" => Keys::flow_emerg_mode_entered,
-            "flow_emerg_mode_over" => Keys::flow_emerg_mode_over,
             "flow_wrk_spare_sync_avg" => Keys::flow_wrk_spare_sync_avg,
             "flow_wrk_spare_sync_empty" => Keys::flow_wrk_spare_sync_empty,
             "flow_wrk_spare_sync_incomplete" => Keys::flow_wrk_spare_sync_incomplete,
