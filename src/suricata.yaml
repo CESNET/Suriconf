@@ -636,7 +636,7 @@ logging:
       enabled: yes
       # type: json
   - file:
-      enabled: no
+      enabled: yes
       level: info
       filename: suricata.log
       # format: "[%i - %m] %z %d: %S: %M"
@@ -1366,7 +1366,7 @@ host-mode: auto
 # Number of packets preallocated per thread. The default is 1024. A higher number 
 # will make sure each CPU will be more easily kept busy, but may negatively 
 # impact caching.
-#max-pending-packets: 1024
+max-pending-packets: 1024
 
 # Runmode the engine should use. Please check --list-runmodes to get the available
 # runmodes for each packet acquisition method. Default depends on selected capture
@@ -1721,10 +1721,10 @@ host:
 #
 # Used by xbits 'ippair' tracking.
 #
-#ippair:
-#  hash-size: 4096
-#  prealloc: 1000
-#  memcap: 32 MiB
+ippair:
+  hash-size: 4096
+  prealloc: 1000
+  memcap: 32 MiB
 
 # Decoder settings
 
@@ -1881,7 +1881,7 @@ threading:
   #
   cpu-affinity:
     management-cpu-set:
-      cpu: [ 7, 8, ]  # include only these CPUs in affinity settings
+      cpu: [ 7, 8 ]  # include only these CPUs in affinity settings
       mode: "exclusive"
     receive-cpu-set:
       cpu: [ 0 ]  # include only these CPUs in affinity settings

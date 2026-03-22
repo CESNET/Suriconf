@@ -17,10 +17,14 @@ pub fn json_to_value(json_bufreader: BufReader<File>) -> Result<Value, Box<dyn s
     let json: Value = serde_json::from_reader(json_bufreader)?;
     Ok(json)
 }
+pub fn get_the_last_one_stats(json: BufReader<File>) -> Result<Value, Box<dyn std::error::Error>> {
+    let stream = Deserializer::from_reader(json).into_iter::<Value>();
+    let last = stream.last().ok_or("Empty stream")??;
+    Ok(last)
+}
 
 pub fn find_in_json_with_path_ref(file_value: &mut Value, path: &str) ->  Value {
      file_value.pointer_mut(path).expect("Unable to find value at path.").clone()
-
 }
 
 pub fn find_in_json_with_path_mut<'a>(file_value: &'a mut Value, path: &str) -> &'a mut Value {
@@ -32,6 +36,36 @@ pub fn save_to_json(json: &Value, file: &PathBuf) -> Result<(), Box<dyn std::err
     let writer = BufWriter::new(file);
     serde_json::to_writer_pretty(writer, &json)?;
     Ok(())
+}
+
+pub fn check_emergency(stats: &PathBuf) -> bool {
+    let stats = match open_json(stats) {
+        Err(e) => {panic!("{e}")},
+        Ok(stats) => {stats}
+    };
+
+    let last_stat = match get_the_last_one_stats(stats) {
+        Ok(last_stat) => {last_stat},
+        Err(e) => {return false;}
+    };
+
+    match find_emerg_mode_entered(&last_stat) {
+        Some(result) => {
+            result
+        },
+        None => {false}
+    }
+}
+
+pub fn find_emerg_mode_entered(stats: &Value) -> Option<bool> {
+    let emerg_mode_entered = stats.get("stats").and_then(|h| h.get("flow")
+        .and_then(|p| p.get("emerg_mode_entered")).and_then(|p| p.as_u64()))?;
+    if emerg_mode_entered > 0 {
+        Some(true)
+    }
+    else {
+        Some(false)
+    }
 }
 
 #[derive(Serialize, Debug, Default)]

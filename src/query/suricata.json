@@ -1,7 +1,25 @@
 {
   "questions": {
+    "defrag_memcap" : {
+      "path_to_value": "/defrag/memcap"
+    },
+    "stream_memcap" : {
+      "path_to_value": "/stream/memcap"
+    },
+    "reassembly_memcap" : {
+      "path_to_value": "/stream/reassembly/memcap"
+    },
+    "ippair_memcap" : {
+      "path_to_value": "/ippair/memcap"
+    },
+    "host_memcap" : {
+      "path_to_value": "/host/memcap"
+    },
     "flow_memcap": {
       "path_to_value": "/flow/memcap"
+    },
+    "max_pending_packets" : {
+      "path_to_value": "/max-pending-packets"
     },
     "flow_hashsize": {
       "path_to_value": "/flow/hash-size"

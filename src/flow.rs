@@ -1,9 +1,10 @@
-use crate::structures::{Module, Keys, ModuleResult, RobRegression, Analysis, Thread, Answer, Change, Reason};
+use byte_unit::{Byte, UnitType};
+use crate::structures::{Keys, ModuleResult, Analysis, Answer, Change, Reason, MemcapChange};
+use crate::module::Module;
 use std::collections::HashMap;
 use serde_json::{Value};
 use std::collections::BTreeMap;
-use crate::{FLOW_WINDOW, MAX_AVG_RATIO, LOAD_FACTOR, MIN_AVG_RATIO, FLOW_OBJECT, SYNC_AVG, FLOW_BUCKET, FLOW_LOCAL_THREAD_MAX, ROB_REGRESSION, WINDOWS, HUBER_THRESHOLD, CPU_USAGE_MAX, MIN_RUN, MANAGER_SLOPE};
-use crate::regression::{my_huber_regression, my_theil_sen_regression};
+use crate::{FLOW_WINDOW, MAX_AVG_RATIO, LOAD_FACTOR, MIN_AVG_RATIO, FLOW_OBJECT, SYNC_AVG, FLOW_BUCKET, FLOW_LOCAL_THREAD_MAX};
 
 #[derive(Debug)]
 pub struct FlowModule {
@@ -32,20 +33,18 @@ pub struct SweepLineAlgo {
     pub flows: i64
 }
 
-#[derive(Debug, Default)]
-pub struct RecyclerUp {
-    pub queue_growth: f64,
-    pub now_in_queue_avg: f64,
-    pub now_recycled_avg: f64
-}
-
 impl Module for FlowModule {
     fn new(analysis: &Analysis, debug: bool) -> Self {
         let keys = [
             Keys::max_memory_usage,
-            Keys::max_cpu_usage_vec,
             Keys::threads_stat,
             Keys::uptime,
+            Keys::defrag_memcap, 
+            Keys::stream_memcap, 
+            Keys::reassembly_memcap, 
+            Keys::ippair_memcap, 
+            Keys::host_memcap,
+            Keys::max_pending_packets, 
             Keys::flow_memcap,
             Keys::flow_memuse,
             Keys::flow_active,
@@ -54,14 +53,10 @@ impl Module for FlowModule {
             Keys::flow_managers,
             Keys::flow_recyclers,
             Keys::flow_set,
-            Keys::flow_rc_queue_avg,
-            Keys::flow_rc_recycled,
             Keys::flow_mgr_full_hash_pass,
             Keys::flow_wrk_spare_sync_avg,
             Keys::flow_wrk_spare_sync_empty,
             Keys::flow_wrk_spare_sync_incomplete,
-            Keys::flow_emerg_mode_entered,
-            Keys::flow_emerg_mode_over,
             Keys::flow_timeouts_def_new,
             Keys::flow_timeouts_def_estab,
             Keys::flow_timeouts_def_closed,
@@ -105,29 +100,15 @@ impl Module for FlowModule {
     }
 
     fn main(&mut self, answers: &Vec<Answer<'_>>) -> Vec<Change> {
-        let mut min_slope :f64 = f64::MAX;
-
-        match self.get_manager_count(answers, &mut min_slope) {
-            (ModuleResult::Up, Some(new_managers)) => {
-                *self.questions.get_mut(&Keys::flow_managers).expect("Unable to get flow_managers from intern table.") = Value::Number(new_managers.into());
-            },
-            _ => {}
-        }
-
         if self.debug {
-            println!("Minimal manager slope: {min_slope}.");
             println!("Suricata max flow active: {}", self.get_suri_max_flow_active_stat(answers));
         }
-
-        match self.get_recycler_count(answers) {
-            (ModuleResult::Up, Some(new_recyclers)) => {
-                *self.questions.get_mut(&Keys::flow_recyclers).expect("Unable to get flow_recyclers from intern table.") = Value::Number(new_recyclers.into());
-            },
-            _ => {}
-
+        let flow_mgr_full_result = self.get_flow_mgr_full_result(answers, self.debug);
+        let min_slope = flow_mgr_full_result.iter().min_by(|a, b| a.partial_cmp(b).expect("Unable to compare flow_mgr_full_result.")).expect("Unable to find manager minimum slope.");
+        if self.debug {
+            println!("Minimal slope: {min_slope}");
         }
-
-        self.sweep_line_algorithm(answers, min_slope);
+        self.sweep_line_algorithm(answers, *min_slope);
 
          match self.get_prealloc(answers) {
              ModuleResult::Up|ModuleResult::Down => {
@@ -144,8 +125,20 @@ impl Module for FlowModule {
            ModuleResult::Ok  => {}
        }
 
-        *self.questions.get_mut(&Keys::flow_memcap).expect("Unable to get flow_memcap from intern table.") = Value::Number((self.get_flow_memcap(answers) as u64).into());
-
+        let changes : Vec<MemcapChange> = vec![MemcapChange {
+            keys: Keys::flow_memcap, 
+            value:self.get_flow_memcap(answers) as u64
+        }];
+        
+        if self.free_memcap(answers, &changes, self.debug) {
+            let flow_memcap = changes.iter().find(|a| a.keys == Keys::flow_memcap).expect("Unable to getf low_memcap from MemcapChange vector.").value;
+            *self.questions.get_mut(&Keys::flow_memcap).expect("Unable to get flow_memcap from intern table.") = Value::String(Byte::from_u64(flow_memcap)
+                .get_appropriate_unit(UnitType::Binary).to_string());    
+        }
+        else {
+            panic!("Unable to set flow_memcap, not enough memory. Memory check failed. Check max_memory_usage.")
+        }
+        
         Change::collect_changes(&self.questions)
     }
 
@@ -198,20 +191,6 @@ impl FlowModule {
 
     fn get_flow_hash_size_stat(&self, answers: &Vec<Answer<'_>>) -> f64 {
         answers.iter().find(|h| h.key == &Keys::flow_hashsize).and_then(|h| h.value.as_f64()).expect("Flow hashsize cannot be found.")
-    }
-
-    fn get_uptime_stat(&self, answers: &Vec<Answer<'_>>) -> u64 {
-        *answers.iter().find(|h| h.key == &Keys::uptime).expect("Unable to get uptime.").value
-        .as_array().expect("Unable to create array from uptime record.").iter().map(|a| a.as_u64().expect("Unable to transform uptime to u64.")).collect::<Vec<u64>>().last().expect("Unable to get last uptime.")
-    }
-
-    fn get_recycled_stat(&self, answers: &Vec<Answer<'_>>) -> Vec<u64> {
-        answers.iter().find(|h| h.key == &Keys::flow_rc_recycled).expect("Unable to get flow_rc_recycled.").value
-        .as_array().expect("Unable to create array from flow_rc_recycled record.").iter().map(|a| a.as_u64().expect("Unable to transform flow_rc_recycled to u64.")).collect::<Vec<u64>>()
-    }
-
-    fn get_load_factor(&self, flow_active: i64, flow_hash_size: f64) -> f64  {
-        flow_active as f64 / flow_hash_size
     }
 
     fn get_flow_hash_size(&mut self, answers: &Vec<Answer<'_>>) -> ModuleResult {
@@ -277,259 +256,6 @@ impl FlowModule {
         let  mut flow_id = flow_id;
         flow_id &= bitmask;
         flow_id
-    }
-
-    fn get_specific_cpu_usage(&self, answers: &Vec<Answer<'_>>, thread_name: &str) -> Vec<Thread> {
-        let threads = answers.iter().find(|h| h.key == &Keys::threads_stat).expect("Unable to get threads_stat.").value
-            .as_array().expect("Unable to create array from mgr_cpu_usage record.");
-
-        let mut cpu_usages: Vec<Thread> = Vec::new();
-
-        for thread in threads {
-            let my_thread: Thread = serde_json::from_value(thread.clone())
-                .expect("Unable to deserialize");
-            if my_thread.name.iter().any(|name| name.starts_with(thread_name)) {
-                cpu_usages.push(my_thread);
-            }
-        }
-        cpu_usages
-    }
-
-    fn get_manager_count(&self, answers: &Vec<Answer<'_>>, min_slope: &mut f64) -> (ModuleResult, Option<u64>) {
-        let flow_mgr_full_hash_pass = answers.iter().find(|h| h.key == &Keys::flow_mgr_full_hash_pass).expect("Unable to get flow_mgr_full_hash_pass.").value
-            .as_array().expect("Unable to create array from flow_mgr_full_hash_pass record.").iter().map(|v| v.as_f64().expect("Unable to transform flow_mgr_full_hash_pass u64.")).collect::<Vec<f64>>();
-
-        if self.debug {
-            println!("flow_mgr_full_hash_pass: {:?}", flow_mgr_full_hash_pass);
-        }
-
-        let uptime = self.get_uptime_stat(answers);
-        let num_elements = MIN_RUN / FLOW_WINDOW ;
-
-        let flow_mgr_full_result: Vec<f64> =
-        if ROB_REGRESSION == RobRegression::Huber {
-            my_huber_regression(flow_mgr_full_hash_pass, uptime, FLOW_WINDOW, num_elements)
-
-        }
-        else {
-            my_theil_sen_regression(flow_mgr_full_hash_pass, uptime, FLOW_WINDOW, num_elements)
-
-        };
-
-        let mgr_cpu_usages: Vec<Thread> = self.get_specific_cpu_usage(answers, "FM");
-
-        if self.debug {
-            println!("flow_mgr_full_result: {:?}, mgr_cpu_usages: {:?}",  flow_mgr_full_result, mgr_cpu_usages);
-        }
-
-        let mut counter = 0;
-        let mut sm_counter = 0;
-        let mut avg_cpu_usage: Vec<f32> = Vec::new();
-        let mut current_flow_mgr_full_result: Vec<f64>;
-        let mut up=  true;
-        let mut slope_vector: Vec<f64> = Vec::new();
-        let mut tmp_slope_vector: Vec<f64> = Vec::new();
-
-        loop {
-
-            for i in 0..WINDOWS {
-                for mgr_cpu_usage in &mgr_cpu_usages {
-                    let avg: f32 = mgr_cpu_usage.cpu_usage[((counter*WINDOWS+i)*num_elements) as usize..(((counter*WINDOWS+1)+i)*num_elements) as usize]
-                        .iter().sum::<f32>() / (num_elements as f32);
-                    avg_cpu_usage.push(avg);
-                }
-            }
-
-            current_flow_mgr_full_result = flow_mgr_full_result[(counter*WINDOWS) as usize..((counter+1)*WINDOWS) as usize].to_vec();
-
-
-            for flow_mgr_full_result in &current_flow_mgr_full_result {
-                let avg: f32 = avg_cpu_usage[(sm_counter * (avg_cpu_usage.len()/WINDOWS as usize)) ..
-                    ((sm_counter + 1) * (avg_cpu_usage.len()/WINDOWS as usize))]
-                    .iter().sum::<f32>() / (avg_cpu_usage.len()/WINDOWS as usize) as f32;
-                sm_counter+=1;
-
-                if flow_mgr_full_result < min_slope {
-                    *min_slope = *flow_mgr_full_result;
-                }
-
-                if flow_mgr_full_result < &MANAGER_SLOPE {
-                    tmp_slope_vector.push(*flow_mgr_full_result);
-                    up &= true;
-                }
-                else {
-                    up &= false;
-                    break;
-                }
-
-                if avg > CPU_USAGE_MAX {
-                    up &= true;
-                }
-                else {
-                    up &= false;
-                    break;
-                }
-            }
-            sm_counter=0;
-
-            if up {
-                slope_vector.push(tmp_slope_vector.iter().sum::<f64>() / tmp_slope_vector.len() as f64);
-            }
-
-            if current_flow_mgr_full_result.last() == flow_mgr_full_result.last() {
-                break;
-            }
-            counter +=1;
-            current_flow_mgr_full_result.clear();
-            avg_cpu_usage.clear();
-            tmp_slope_vector.clear();
-        }
-
-        if !slope_vector.is_empty() {
-            let mgr_power = slope_vector.iter().min_by(|a, b| a.partial_cmp(b).unwrap()).expect("Unable to find mgr_power minimum.");
-            let managers = self.get_managers_stat(answers);
-            let one_mgr_power = mgr_power/managers;
-            let managers = (MANAGER_SLOPE/one_mgr_power).ceil() as u64;
-            return (ModuleResult::Up, Some(managers));
-        }
-        (ModuleResult::Ok, None)
-    }
-
-    fn get_recycler_count(&self, answers: &Vec<Answer<'_>>) -> (ModuleResult, Option<u64>) {
-
-        let in_queue = self.get_flows_in_queue(answers);
-        let recycled = self.get_recycled_stat(answers);
-        let uptime = self.get_uptime_stat(answers);
-        let num_elements = MIN_RUN / FLOW_WINDOW ;
-
-        let in_queue_result: Vec<f64> =
-            if ROB_REGRESSION == RobRegression::Huber {
-                my_huber_regression(in_queue.clone(), uptime, FLOW_WINDOW, num_elements)
-            }
-            else {
-                my_theil_sen_regression(in_queue.clone(), uptime, FLOW_WINDOW, num_elements)
-            };
-
-        let rc_cpu_usages: Vec<Thread> = self.get_specific_cpu_usage(answers, "FR");
-
-        let mut counter = 0;
-        let mut sm_counter = 0;
-        let mut avg_cpu_usage: Vec<f32> = Vec::new();
-        let mut current_in_queue_result: Vec<f64>;
-        let mut up=  true;
-        let mut slope_vector: Vec<RecyclerUp> = Vec::new();
-        let mut tmp_slope_vector: Vec<f64> = Vec::new();
-
-        loop {
-
-            for i in 0..WINDOWS {
-                for rc_cpu_usage in &rc_cpu_usages {
-                    let avg: f32 = rc_cpu_usage.cpu_usage[((counter*WINDOWS+i)*num_elements) as usize..(((counter*WINDOWS+1)+i)*num_elements) as usize]
-                        .iter().sum::<f32>() / (num_elements as f32);
-                    avg_cpu_usage.push(avg);
-                }
-            }
-
-            current_in_queue_result = in_queue_result[(counter*WINDOWS) as usize..((counter+1)*WINDOWS) as usize].to_vec();
-
-
-            for current_queue in &current_in_queue_result {
-                let avg: f32 = avg_cpu_usage[(sm_counter * (avg_cpu_usage.len()/WINDOWS as usize)) ..
-                    ((sm_counter + 1) * (avg_cpu_usage.len()/WINDOWS as usize))]
-                    .iter().sum::<f32>() / (avg_cpu_usage.len()/WINDOWS as usize) as f32;
-                sm_counter+=1;
-
-                if current_queue > &HUBER_THRESHOLD {
-                    tmp_slope_vector.push(*current_queue);
-                    up &= true;
-                }
-                else {
-                    up &= false;
-                    break;
-                }
-
-                if avg > CPU_USAGE_MAX {
-                    up &= true;
-                }
-                else {
-                    up &= false;
-                    break;
-                }
-            }
-            sm_counter=0;
-
-            if up {
-                let mut recycler_up: RecyclerUp = Default::default();
-                recycler_up.queue_growth = tmp_slope_vector.iter().sum::<f64>() / tmp_slope_vector.len() as f64;
-                let now_in_queue = in_queue[(counter*WINDOWS*num_elements) as usize ..((counter+WINDOWS)*WINDOWS*num_elements) as usize].to_vec();
-                let now_recycled = recycled[(counter*WINDOWS*num_elements) as usize..((counter+WINDOWS)*WINDOWS*num_elements) as usize].to_vec();
-                let now_recycled: Vec<f64> = now_recycled.windows(2).map(|w| (w[1] - w[0]) as f64).collect();
-
-                recycler_up.now_in_queue_avg = now_in_queue.iter().sum::<f64>() / now_in_queue.len() as f64;
-                recycler_up.now_recycled_avg = now_recycled.iter().sum::<f64>() / now_recycled.len() as f64;
-                slope_vector.push(recycler_up);
-            }
-
-            if current_in_queue_result.last() == in_queue_result.last() {
-                break;
-            }
-            counter +=1;
-            current_in_queue_result.clear();
-            avg_cpu_usage.clear();
-            tmp_slope_vector.clear();
-        }
-
-        if !slope_vector.is_empty() {
-            let recycler_up = slope_vector.iter().max_by(|a, b| a.queue_growth.partial_cmp(&b.queue_growth).unwrap()).expect("Unable to find rc_power maximum.");
-            let recyclers = self.get_recyclers_stat(answers);
-            let one_recycler_power = recyclers / recycler_up.now_recycled_avg;
-            let has_to_clean = recycler_up.now_in_queue_avg*recycler_up.queue_growth;
-            let recyclers = (has_to_clean / one_recycler_power).ceil() as u64;
-            return (ModuleResult::Up, Some(recyclers));
-        }
-
-        (ModuleResult::Ok, None)
-    }
-
-    fn get_recyclers_stat(&self, answers: &Vec<Answer<'_>>) -> f64 {
-         answers.iter().find(|h| h.key == &Keys::flow_recyclers).expect("Unable to get flow_managers.").value.as_f64().expect("Unable to transform flow_managers to f64.")
-    }
-
-    fn get_managers_stat(&self, answers: &Vec<Answer<'_>>) -> f64 {
-        answers.iter().find(|h| h.key == &Keys::flow_managers).expect("Unable to get flow_managers.").value.as_f64().expect("Unable to transform flow_managers to u64.")
-    }
-
-    fn get_flows_in_queue(&self, answers: &Vec<Answer<'_>>) -> Vec<f64> {
-        let recycled_avg = answers.iter().find(|h| h.key == &Keys::flow_rc_queue_avg).expect("Unable to get flow_rc_queue_avg.").value
-            .as_array().expect("Unable to create array from flow_rc_queue_avg record.").iter().map(|a| a.as_u64().expect("Unable to transform flow_rc_queue_avg u64.")).collect::<Vec<u64>>();
-
-        if self.debug {
-            println!("recycled_avg: {:?}", recycled_avg);
-        }
-
-        let mut in_queue: Vec<f64> = Vec::new();
-
-        let mut counter = 0;
-        let mut sum = 0;
-
-        for record in recycled_avg.iter() {
-            counter += 1;
-
-            if self.debug {
-                println!("before queue_size: {}, record: {record}, counter: {counter}, sum: {sum}",  record * counter - sum);
-            }
-
-            let queue_size = record * counter - sum;
-
-            if self.debug {
-                println!("queue_size: {queue_size}.");
-            }
-
-            sum += queue_size;
-
-            in_queue.push(queue_size as f64);
-        }
-        in_queue
     }
 
     fn get_timeout_from_stats(&self, answers: &Vec<Answer<'_>>, state: &str, proto: &str) -> u64 {
@@ -648,30 +374,17 @@ impl FlowModule {
         }
     }
 
-    fn get_flow_memcap(&mut self, answers: &Vec<Answer<'_>>) -> f64 {
+    fn get_flow_memcap(&mut self, answers: &Vec<Answer<'_>>) -> f64 { 
         let max_flow_active = self.get_suri_max_flow_active_stat(answers) as f64;
-        let mut wrk_cpu_set_len = answers.iter().find(|a| { a.key == &Keys::max_cpu_usage_vec}).expect("Unable to get workers cpu set.")
-            .value.as_array().map(|a| a.len()).expect("Unable to compute the len of worker cpu set.") as f64;
+        let mut workers: f64=  self.get_workers(answers);
+        
+        // let mut management: f64 = 0.0;
+        // management += self.get_recyclers_stat(answers);
+        // management += self.get_managers_stat(answers);
 
-        let flow_recyclers =  self.questions.get_mut(&Keys::flow_recyclers).expect("Unable to get flow_recyclers from intern table.").clone();
-        let flow_managers = self.questions.get_mut(&Keys::flow_managers).expect("Unable to get flow_managers from intern table.").clone();
-        let mut management = 0.0;
-
-        if flow_recyclers == Value::Null {
-            management += answers.iter().find(|a| {a.key == &Keys::flow_recyclers}).expect("Unable to get flow_recyclers.").value.as_f64().expect("Unable to get  flow_recyclers as f64.");
+        if self.debug {
+            println!("workers: {workers}");
         }
-        else {
-            management += flow_recyclers.as_f64().expect("Unable to transform flow_recyclers to u64.")
-        }
-
-        if flow_managers == Value::Null {
-            management += answers.iter().find(|a| {a.key == &Keys::flow_managers}).expect("Unable to get flow_managers.").value.as_f64().expect("Unable to get  flow_managers as f64.");
-        }
-        else {
-            management += flow_managers.as_f64().expect("Unable to transform flow_managers to u64.")
-        }
-
-        wrk_cpu_set_len = wrk_cpu_set_len - management;
 
         let hash_size = answers.iter().find(|a| {a.key == &Keys::flow_hashsize}).expect("Unable to get hash size of Flow table.").value.as_f64().expect("Unable to get hash_size as f64.");
         let prealloc=
@@ -687,6 +400,6 @@ impl FlowModule {
                 }
             };
 
-        hash_size*FLOW_BUCKET+(max_flow_active+prealloc*1.2+wrk_cpu_set_len*FLOW_LOCAL_THREAD_MAX)*FLOW_OBJECT
+        hash_size*FLOW_BUCKET+(max_flow_active+prealloc*1.2+workers*FLOW_LOCAL_THREAD_MAX)*FLOW_OBJECT
     }
 }

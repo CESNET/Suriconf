@@ -1,9 +1,9 @@
 use std::path::PathBuf;
 use std::process::{Child, Command};
-use crate::yaml::Suriconf;
+use crate::yaml::{emergency_check_memcap, Suriconf};
 use crate::{json, FLOW_WINDOW};
-use crate::json::{Preconfiguration};
-use crate::structures::{Thread, SystemVar, ctrl_channel, CreatedLogs, CaptureMode};
+use crate::json::{check_emergency, Preconfiguration};
+use crate::structures::{Thread, SystemVar, ctrl_channel, CreatedLogs, CaptureMode, SuricataAgain};
 use is_executable::IsExecutable;
 use std::time::Duration;
 use crossbeam_channel::{select, tick};
@@ -13,8 +13,9 @@ use std::thread;
 use sysinfo::System;
 use procfs::process::{all_processes, Process};
 
-pub fn execute_suricata<'a>(suriconf: &Suriconf, logs: &mut CreatedLogs) -> Option<SystemVar> {
+pub fn execute_suricata<'a>(suriconf: &Suriconf, logs: &mut CreatedLogs) -> Option<(SystemVar, SuricataAgain)> {
     let mut sys: SystemVar = Default::default();
+    let mut suricata_again: SuricataAgain = Default::default();
 
     let mut vec_of_sur_cmd: Vec<String> = vec![];
     get_capture_mode(suriconf, &mut vec_of_sur_cmd);
@@ -75,6 +76,11 @@ pub fn execute_suricata<'a>(suriconf: &Suriconf, logs: &mut CreatedLogs) -> Opti
             select! {
                 recv(cpu_usage_ticks) -> _ => {
                     get_cpu_usage(&mut sys);
+                    if check_emergency(&logs.stats) {
+                        emergency_check_memcap(logs, suriconf.max_memory_usage, get_workers(&mut sys));
+                        suricata_again = SuricataAgain::RunAgain;
+                        kill_suricata(&mut child);
+                    }
                 }
 
                 recv(ticks) -> _ => {
@@ -98,7 +104,7 @@ pub fn execute_suricata<'a>(suriconf: &Suriconf, logs: &mut CreatedLogs) -> Opti
             }
         }
     }
-    Some(sys)
+    Some((sys, suricata_again))
 }
 
 pub fn get_capture_mode(suriconf: &Suriconf, vec_of_sur_cmd: &mut Vec<String>) {
@@ -121,6 +127,17 @@ pub fn get_cpu_usage(sys: &mut SystemVar) {
                 sys.threads.push(Thread {name: vec![], core_id, cpu_usage: vec![cpu.cpu_usage()]});
             }
         }
+}
+
+pub fn get_workers(sys: &mut SystemVar) -> u64 {
+    let mut workers: u64 = 0;
+
+    for thread in &sys.threads {
+        if thread.name.iter().any(|name| name.starts_with("W")) {
+            workers += 1;
+        }
+    }
+    workers
 }
 
 fn check_process_name_for_suricata_main() -> Option<i32> {

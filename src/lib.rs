@@ -7,13 +7,14 @@ macro_rules! mods {
 }
 
 mods!(argument, structures, yaml, suricata, json, test_cpu_affinity,
-    memory_usage, capture_mode, query, flow, regression);
+    memory_usage, capture_mode, query, flow, flow_threads, regression, module);
 
 static FLOW_WINDOW: u64 = 5; // in seconds
 static MIN_RUN: u64 = 120;
 static WINDOWS:u64 = 3;
 static FLOW_BUCKET: f64 = 64.0; // 64B arch linux, arch:x86
-static FLOW_OBJECT: f64 = 296.0; // 296 B for flow object
+static FLOW_OBJECT: f64 = 296.0; // 296 B for flow object // reality 272 B
+static PACKET: u64 = 464;
 static LOAD_FACTOR: f64 = 3f64;
 static MAX_AVG_RATIO: i64 = 3;
 static MIN_AVG_RATIO: f64 = 0.25;
