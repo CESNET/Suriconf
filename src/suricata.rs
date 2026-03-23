@@ -12,16 +12,20 @@ use std::io::{BufRead, BufReader};
 use std::thread;
 use sysinfo::System;
 use procfs::process::{all_processes, Process};
+use scirs2_core::convenience::boolean;
 use signal_hook::consts::SIGINT;
 use signal_hook::iterator::Signals;
-use std::sync::{Arc, Mutex};
+use std::sync::{atomic, Arc, Mutex};
+use std::sync::atomic::{AtomicBool, Ordering};
 
 pub fn execute_suricata<'a>(suriconf: &Suriconf, logs: &mut CreatedLogs) -> Option<(SystemVar, SuricataAgain)> {
     let sys = Arc::new(Mutex::new(SystemVar::default()));
     let sys_thread = Arc::clone(&sys);
 
-    let mut suricata_again = Arc::new(Mutex::new(SuricataAgain::default()));
-    let suricata_again_thread = Arc::clone(&suricata_again);
+    let kill = Arc::new(AtomicBool::new(false));
+    let kill_thread = Arc::clone(&kill);
+
+    let mut suricata_again = SuricataAgain::default();
 
     let mut vec_of_sur_cmd: Vec<String> = vec![];
     get_capture_mode(suriconf, &mut vec_of_sur_cmd);
@@ -73,12 +77,10 @@ pub fn execute_suricata<'a>(suriconf: &Suriconf, logs: &mut CreatedLogs) -> Opti
             }
         });
 
-        let emergency_ticks = tick(Duration::from_secs(FLOW_WINDOW));
         let timeout = Duration::from_secs(suriconf.preconf_time);
         let start = std::time::Instant::now();
         let ticks_thread = tick(Duration::from_millis(100));
         let cpu_usage_ticks = tick(Duration::from_secs(FLOW_WINDOW));
-        let emergency_ticks = tick(Duration::from_secs(FLOW_WINDOW));
 
         let cpu_usage_thread = thread::spawn(move || {
             loop {
@@ -89,18 +91,15 @@ pub fn execute_suricata<'a>(suriconf: &Suriconf, logs: &mut CreatedLogs) -> Opti
                 }
 
                 recv(ticks_thread) -> _ => {
-                        if start.elapsed() >= timeout {
-                            break;
-                        }
-                        let suricata_again_thread = suricata_again_thread.lock().expect("Unable to lock SuricataAgain.");
-                        if *suricata_again_thread == SuricataAgain::RunAgain {
-                            break;
-                        }
+                        if kill_thread.load(Ordering::SeqCst) {
+                               break;
+                         }
                     }
 
                 recv(ctrl_c_events_thread) -> _ => {
                    break;
                 }
+
                 }
             }
         });
@@ -115,19 +114,11 @@ pub fn execute_suricata<'a>(suriconf: &Suriconf, logs: &mut CreatedLogs) -> Opti
                     if check_emergency(&logs.stats) {
                         let mut sys = sys.lock().expect("Unable to lock SystemVar.");
                         emergency_check_memcap(logs, suriconf.max_memory_usage, get_workers(&mut sys));
-                        let mut suricata_again = suricata_again.lock().expect("Unable to lock SuricataAgain.");
-                        *suricata_again = SuricataAgain::RunAgain;
+                        suricata_again = SuricataAgain::RunAgain;
                         kill_suricata(&mut child);
+                        break;
                     }
                 }
-
-                // recv(emergency_ticks) -> _ => {
-                //     if check_emergency(&logs.stats) {
-                //         emergency_check_memcap(logs, suriconf.max_memory_usage, get_workers(&mut sys));
-                //         suricata_again = SuricataAgain::RunAgain;
-                //         kill_suricata(&mut child);
-                //     }
-                // }
 
                 recv(ticks) -> _ => {
 
@@ -135,10 +126,12 @@ pub fn execute_suricata<'a>(suriconf: &Suriconf, logs: &mut CreatedLogs) -> Opti
                         let mut sys = sys.lock().expect("Unable to lock SystemVar.");
                         get_cores_with_threads(suri_pid, &mut sys);
                         kill_suricata(&mut child);
+                        kill.store(true, Ordering::SeqCst);
                         break;
                     }
 
                     if let Ok(Some(_)) = child.try_wait() {
+                        kill.store(true, Ordering::SeqCst);
                         break;
                     }
                 }
@@ -150,20 +143,13 @@ pub fn execute_suricata<'a>(suriconf: &Suriconf, logs: &mut CreatedLogs) -> Opti
                 }
             }
         }
-
     cpu_usage_thread.join().expect("Cpu_usage_thread panic.");
-
     }
 
     let sys = Arc::try_unwrap(sys)
         .expect("Arc still has multiple owners with SystemVar.")
         .into_inner()
         .expect("Unable to get SystemVar behind Mutex.");
-
-    let suricata_again =  Arc::try_unwrap(suricata_again)
-        .expect("Arc still has multiple owners with SuricataAgain.")
-        .into_inner()
-        .expect("Unable to get SuricataAgain behind Mutex.");
 
     Some((sys, suricata_again))
 }
