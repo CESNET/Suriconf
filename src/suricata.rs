@@ -73,10 +73,12 @@ pub fn execute_suricata<'a>(suriconf: &Suriconf, logs: &mut CreatedLogs) -> Opti
             }
         });
 
+        let emergency_ticks = tick(Duration::from_secs(FLOW_WINDOW));
         let timeout = Duration::from_secs(suriconf.preconf_time);
         let start = std::time::Instant::now();
         let ticks_thread = tick(Duration::from_millis(100));
         let cpu_usage_ticks = tick(Duration::from_secs(FLOW_WINDOW));
+        let emergency_ticks = tick(Duration::from_secs(FLOW_WINDOW));
 
         let cpu_usage_thread = thread::spawn(move || {
             loop {
@@ -118,6 +120,14 @@ pub fn execute_suricata<'a>(suriconf: &Suriconf, logs: &mut CreatedLogs) -> Opti
                         kill_suricata(&mut child);
                     }
                 }
+
+                // recv(emergency_ticks) -> _ => {
+                //     if check_emergency(&logs.stats) {
+                //         emergency_check_memcap(logs, suriconf.max_memory_usage, get_workers(&mut sys));
+                //         suricata_again = SuricataAgain::RunAgain;
+                //         kill_suricata(&mut child);
+                //     }
+                // }
 
                 recv(ticks) -> _ => {
 
