@@ -4,9 +4,6 @@ use chrono::offset::Utc;
 use chrono::DateTime;
 use std::time::{SystemTime};
 use std::fs;
-use crossbeam_channel::{bounded, Receiver};
-use signal_hook::consts::signal::SIGINT;
-use signal_hook::iterator::Signals;
 use std::thread;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
@@ -427,16 +424,4 @@ impl Default for Analysis {
     fn default() -> Self {
         Analysis::Static
     }
-}
-
-pub fn ctrl_channel() -> Result<Receiver<()>> {
-    let (sender, receiver) = bounded(100);
-    let mut signals = Signals::new([SIGINT])?;
-
-    thread::spawn(move || {
-        for _ in signals.forever() {
-            let _ = sender.send(());
-        }
-    });
-    Ok(receiver)
 }
