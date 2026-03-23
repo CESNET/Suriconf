@@ -6,8 +6,8 @@ macro_rules! mods {
     };
 }
 
-mods!(argument, structures, yaml, suricata, json, test_cpu_affinity,
-    memory_usage, capture_mode, query, flow, flow_threads, regression, module);
+mods!(argument, structures, yaml, suricata, json,
+    memory_usage, query, flow, flow_threads, regression, module);
 
 static FLOW_WINDOW: u64 = 5; // in seconds
 static MIN_RUN: u64 = 120;

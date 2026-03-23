@@ -5,7 +5,7 @@ use serde_yaml_ng::{Value, Mapping, Sequence};
 use walkdir::WalkDir;
 use std::fs::OpenOptions;
 use crate::argument::{Commands, Args};
-use crate::structures::{Analysis, CaptureMode, CreatedLogs, JsonVar, Mode, Keys};
+use crate::structures::{Analysis, CaptureMode, CreatedLogs, JsonVar, Mode, Keys, Modules};
 use byte_unit::{Byte, UnitType};
 use crate::{MANAGER_START, PACKET, RECYCLER_START};
 
@@ -130,7 +130,7 @@ pub fn check_set_cpu_affinity(suricata_string: &mut Value, suriconf: &Suriconf, 
         *set_cpu_affinity = Value::String("yes".to_string());
     }
 
-    if suriconf.modules.contains(&"flow_threads".to_string()) && suriconf.modules.contains(&"cpu_affinity".to_string()) {
+    if suriconf.modules.contains(&Modules::FlowThreads) && suriconf.modules.contains(&Modules::CpuAffinity) {
         match set_management_set(suricata_string, suriconf) {
             Err(e) => { return Err(e)}
             Ok(()) => {}
@@ -143,14 +143,14 @@ pub fn check_set_cpu_affinity(suricata_string: &mut Value, suriconf: &Suriconf, 
             Ok(()) => {}
         }
     }
-    else if suriconf.modules.contains(&"cpu_affinity".to_string()) {
+    else if suriconf.modules.contains(&Modules::CpuAffinity) {
         // max_cpu_usage_vec is just for worker threads
         match set_workers_set(suricata_string, suriconf, suriconf.max_cpu_usage_vec.clone()) {
             Err(e) => { return Err(e) },
             Ok(()) => {}
         }
     }
-    else if suriconf.modules.contains(&"flow_threads".to_string()) {
+    else if suriconf.modules.contains(&Modules::FlowThreads) {
         // max_cpu_usage_vec is just for management threads
         match set_management_set(suricata_string, suriconf) {
             Err(e) => { return Err(e) }
@@ -381,7 +381,7 @@ pub struct Suriconf {
     pub preconf_time: u64,
     pub analysis: Analysis,
     pub mode: Mode,
-    pub modules: Vec<String>,
+    pub modules: Vec<Modules>,
     pub interface: String,
     pub capture_mode: CaptureMode,
     pub max_memory_usage: u64,
@@ -506,8 +506,8 @@ impl Suriconf {
         }
     }
 
-    pub fn find_modules(&self, text: &Value) -> Option<Vec<String>> {
-        let mut vec_modules: Vec<String> = Vec::new();
+    pub fn find_modules(&self, text: &Value) -> Option<Vec<Modules>> {
+        let mut vec_modules: Vec<Modules> = Vec::new();
 
         match text.get("modules").and_then(|v| v.as_sequence()) {
             Some(modules) => {
@@ -518,9 +518,9 @@ impl Suriconf {
                         .unwrap_or(false);
 
                     if enabled {
-                        vec_modules.push(module.get("name")
-                            .and_then(|v| v.as_str())?
-                            .to_string());
+                        let module_str = module.get("name")
+                            .and_then(|v| v.as_str())?;
+                        vec_modules.push(Modules::new(module_str));
                     }
                 }
                 Some(vec_modules)
