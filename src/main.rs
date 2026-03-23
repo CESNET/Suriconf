@@ -53,6 +53,8 @@ fn main() {
     let mut logs = CreatedLogs::new(&suriconf.log_dir);
     yaml::close_yaml(&suricata_string, &logs.suri_configuration).unwrap();
 
+    suricata::check_min_suricata_runtime_for_modules(&suriconf);
+
     let sys = loop {
         let (sys, suricata_again) = match suricata::execute_suricata(&suriconf, &mut logs)  {
             Some((sys, suricata_again)) => {
