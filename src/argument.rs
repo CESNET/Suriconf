@@ -1,6 +1,6 @@
 use clap::{Parser, Subcommand};
 use std::path::{PathBuf};
-use crate::structures::{Analysis, Mode, CaptureMode};
+use crate::structures::{Analysis, Mode, CaptureMode, Modules};
 
 /// Suriconf - Configuration Assistant for Suricata
 #[derive(Parser, Debug)]
@@ -20,8 +20,8 @@ pub struct Args {
     pub mode: Option<Mode>,
 
     /// Select modules with which Suriconf will run
-    #[clap(short='M', long, value_delimiter = ' ', num_args = 1..)]
-    pub modules: Option<Vec<String>>,
+    #[clap(short='M', long, value_enum, value_delimiter = ' ', num_args = 1..)]
+    pub modules: Option<Vec<Modules>>,
 
     #[command(subcommand)]
     pub cmd: Option<Commands>,

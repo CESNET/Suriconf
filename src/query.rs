@@ -1,7 +1,7 @@
 use chrono::{DateTime, Utc};
 use std::collections::HashMap;
 use std::path::{PathBuf};
-use crate::structures::{Keys, FileNames, create_module, JsonVar, Answer, Change};
+use crate::structures::{Keys, FileNames, create_module, JsonVar, Answer, Change, Modules};
 use strum::IntoEnumIterator;
 use crate::yaml::{Suriconf};
 use serde_json::{Value};
@@ -162,8 +162,9 @@ impl Resources {
             panic!("{e}");
         }
 
+        self.sort_modules();
         for module in self.suriconf_struct.modules.clone() {
-            self.query_module(module.as_str(), &mut jsons);
+            self.query_module(&module, &mut jsons);
         }
 
         let system_time = SystemTime::now();
@@ -185,7 +186,7 @@ impl Resources {
     }
 
     pub fn sort_modules(&mut self) {
-        const ORDER: [&str; 5] = ["flow_threads", "cpu_affinity", "flow", "memory_usage", "capture_mode"];
+        const ORDER: [&Modules; 4] = [&Modules::FlowThreads , &Modules::CpuAffinity, &Modules::Flow, &Modules::MemoryModule];
         self.suriconf_struct.modules.sort_by_key(|m| {
             ORDER.iter()
                 .position(|&o| o == m)
@@ -193,7 +194,7 @@ impl Resources {
         });
     }
 
-    pub fn query_module(&mut self, module: &str, jsons: &mut Jsons) {
+    pub fn query_module(&mut self, module: &Modules, jsons: &mut Jsons) {
         let mut module = create_module(module, &self.suriconf_struct.analysis, self.debug);
         let questions: Vec<Keys> = module.init_questions();
         self.check_table_if_null(&questions, jsons);

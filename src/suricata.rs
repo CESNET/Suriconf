@@ -1,9 +1,9 @@
 use std::path::PathBuf;
 use std::process::{Child, Command};
 use crate::yaml::{emergency_check_memcap, Suriconf};
-use crate::{json, FLOW_WINDOW};
+use crate::{json, FLOW_WINDOW, WINDOWS};
 use crate::json::{check_emergency, Preconfiguration};
-use crate::structures::{Thread, SystemVar, CreatedLogs, CaptureMode, SuricataAgain};
+use crate::structures::{Thread, SystemVar, CreatedLogs, CaptureMode, SuricataAgain, Modules};
 use is_executable::IsExecutable;
 use std::time::Duration;
 use crossbeam_channel::{bounded, select, tick, Receiver};
@@ -256,4 +256,11 @@ pub fn ctrl_channel() -> anyhow::Result<Receiver<()>> {
         }
     });
     Ok(receiver)
+}
+
+pub fn check_min_suricata_runtime_for_modules(suriconf: &Suriconf) {
+    if suriconf.modules.contains(&Modules::FlowThreads) && WINDOWS*120 > suriconf.preconf_time {
+            panic!("Unable to execute Suricata and have enough samples from preconfiguration, \
+            FlowThreads module needs at least 6 minutes.")
+    }
 }
