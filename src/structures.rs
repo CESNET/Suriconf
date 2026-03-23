@@ -24,16 +24,6 @@ pub enum Reason {
     tcp_reuse // TODO, in future think about tcp_reuse
 }
 
-#[derive(Debug, Clone, ValueEnum)]
-pub enum CaptureMode {
-    DPDK,
-    AF_PACKET
-}
-
-impl Default for CaptureMode {
-    fn default() -> Self { CaptureMode::AF_PACKET }
-}
-
 impl Reason {
     pub fn new(key_str: &str) -> Self {
         match key_str {
@@ -45,6 +35,36 @@ impl Reason {
             _ => panic!("Unable to convert key string slice.")
         }
     }
+}
+
+#[derive(Debug, Clone, ValueEnum, PartialEq, Eq)]
+pub enum Modules {
+    FlowThreads,
+    CpuAffinity,
+    Flow,
+    MemoryModule
+}
+
+impl Modules {
+    pub fn new(key_str: &str) -> Self {
+        match key_str {
+            "flow_threads" => Modules::FlowThreads,
+            "cpu_affinity" => Modules::CpuAffinity,
+            "flow" => Modules::Flow,
+            "memory_module" => Modules::MemoryModule,
+            _ => panic!("Unable to convert key string slice.")
+        }
+    }
+}
+
+#[derive(Debug, Clone, ValueEnum)]
+pub enum CaptureMode {
+    DPDK,
+    AF_PACKET
+}
+
+impl Default for CaptureMode {
+    fn default() -> Self { CaptureMode::AF_PACKET }
 }
 
 #[derive(Debug, PartialEq)]
@@ -113,10 +133,10 @@ pub struct Threads {
 pub struct JsonVar {
     pub var_index: HashMap<Keys, Value>
 }
-pub fn create_module(name: &str, analysis: &Analysis, debug: bool) -> Box<dyn Module> {
-    match name {
-        "flow_threads" =>  Box::new(FlowThreadsModule::new(analysis, debug)),
-        "flow" => Box::new(FlowModule::new(analysis, debug)),
+pub fn create_module(module: &Modules, analysis: &Analysis, debug: bool) -> Box<dyn Module> {
+    match module {
+        Modules::FlowThreads =>  Box::new(FlowThreadsModule::new(analysis, debug)),
+        Modules::Flow => Box::new(FlowModule::new(analysis, debug)),
         _ => panic!("Unknown module."),
     }
 }
