@@ -45,6 +45,12 @@
     "uptime": {
       "path_to_value": "/uptime"
 
+    },
+    "avg_pkt_size": {
+      "path_to_value": "decoder/avg_pkt_size"
+    },
+    "max_pkt_size": {
+      "path_to_value": "decoder/max_pkt_size"
     }
   }
 }

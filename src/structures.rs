@@ -206,7 +206,9 @@ pub enum Keys { // JUST FOR FLOW
     flow_timeouts_icmp_bypass,
     flow_timeouts_icmp_em_new,
     flow_timeouts_icmp_em_estab,
-    flow_timeouts_icmp_em_bypass
+    flow_timeouts_icmp_em_bypass,
+    avg_pkt_size,
+    max_pkt_size,
 }
 
 impl Keys {
@@ -270,6 +272,8 @@ impl Keys {
             "flow_timeouts_icmp_em_new" => Keys::flow_timeouts_icmp_em_new,
             "flow_timeouts_icmp_em_estab" => Keys::flow_timeouts_icmp_em_estab,
             "flow_timeouts_icmp_em_bypass" => Keys::flow_timeouts_icmp_em_bypass,
+            "avg_pkt_size" => Keys::avg_pkt_size,
+            "max_pkt_size" => Keys::max_pkt_size,
             _ => panic!("Unable to convert key string slice.")
         }
     }

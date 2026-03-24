@@ -18,7 +18,7 @@ use signal_hook::iterator::Signals;
 use std::sync::{atomic, Arc, Mutex};
 use std::sync::atomic::{AtomicBool, Ordering};
 
-pub fn execute_suricata<'a>(suriconf: &Suriconf, logs: &mut CreatedLogs) -> Option<(SystemVar, SuricataAgain)> {
+pub fn execute_suricata<'a>(suriconf: &Suriconf, logs: &mut CreatedLogs, options: &Vec<String>) -> Option<(SystemVar, SuricataAgain)> {
     let sys = Arc::new(Mutex::new(SystemVar::default()));
     let sys_thread = Arc::clone(&sys);
 
@@ -50,6 +50,7 @@ pub fn execute_suricata<'a>(suriconf: &Suriconf, logs: &mut CreatedLogs) -> Opti
         ];
 
         args.extend(vec_of_sur_cmd.iter().map(|s| s.as_str()));
+        args.extend(options.iter().map(|s| s.as_str()));
 
         let ctrl_c_events = if let Ok(receiver) = ctrl_channel() {
             receiver
