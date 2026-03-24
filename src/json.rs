@@ -72,6 +72,7 @@ pub fn find_emerg_mode_entered(stats: &Value) -> Option<bool> {
 pub struct Preconfiguration {
     threads_stat: Vec<Thread>,
     flow: FlowStructure,
+    decoder: DecoderStructure,
     uptime: Vec<u64>,
     memcap_pressure: Vec<u64>,
     memcap_pressure_max: Vec<u64>
@@ -91,6 +92,12 @@ pub struct FlowStructure {
     flow_wrk_spare_sync_avg: Vec<u64>,
     flow_wrk_spare_sync_empty: Vec<u64>,
     flow_wrk_spare_sync_incomplete: Vec<u64>
+}
+
+#[derive(Serialize, Debug, Default)]
+pub struct DecoderStructure {
+    avg_pkt_size: Vec<u64>,
+    max_pkt_size: Vec<u64>
 }
 
 #[derive(Serialize, Debug, Default)]
@@ -204,6 +211,15 @@ impl Preconfiguration {
                     if let None = self.find_flow_wrk_spare_sync_incomplete(&value) {
                         return Err(Box::from("Unable to parse wrk_spare_sync_incomplete."))
                     }
+
+                    if let None = self.find_decoder_avg_pkt_size(&value) {
+                        return Err(Box::from("Unable to parse avg_pkt_size."))
+
+                    }
+
+                    if let None = self.find_decoder_max_pkt_size(&value) {
+                        return Err(Box::from("Unable to parse max_pkt_size."))
+                    }
                 },
                 Err(_) => { return Err(Box::from("Unable to parse stats.json.")) }
             }
@@ -297,6 +313,18 @@ impl Preconfiguration {
     pub fn find_flow_wrk_spare_sync_incomplete(&mut self, stats: &Value) -> Option<()> {
         self.flow.flow_wrk_spare_sync_incomplete.push(stats.get("stats").and_then(|h| h.get("flow")
             .and_then(|p| p.get("wrk").and_then(|m| m.get("spare_sync_incomplete")))).and_then(|p| p.as_u64())?);
+        Some(())
+    }
+
+    pub fn find_decoder_avg_pkt_size(&mut self, stats: &Value) -> Option<()> {
+        self.decoder.avg_pkt_size.push(stats.get("stats").and_then(|h| h.get("decoder").
+            and_then(|m| m.get("avg_pkt_size"))).and_then(|p| p.as_u64())?);
+        Some(())
+    }
+
+    pub fn find_decoder_max_pkt_size(&mut self, stats: &Value) -> Option<()> {
+        self.decoder.max_pkt_size.push(stats.get("stats").and_then(|h| h.get("decoder").
+            and_then(|m| m.get("max_pkt_size"))).and_then(|p| p.as_u64())?);
         Some(())
     }
 
