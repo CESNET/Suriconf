@@ -54,9 +54,9 @@ fn main() {
     yaml::close_yaml(&suricata_string, &logs.suri_configuration).unwrap();
 
     suricata::check_min_suricata_runtime_for_modules(&suriconf);
-
+    
     let sys = loop {
-        let (sys, suricata_again) = match suricata::execute_suricata(&suriconf, &mut logs)  {
+        let (sys, suricata_again) = match suricata::execute_suricata(&suriconf, &mut logs, &args.options)  {
             Some((sys, suricata_again)) => {
                 if sys.threads.is_empty() {
                     panic!("Unable to get data from Suricata.");

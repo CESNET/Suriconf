@@ -29,8 +29,11 @@ pub struct Args {
     /// Activate debug mode in Suriconf
     #[clap(short='v', long)]
     pub verbose: bool,
-}
 
+    /// Suricata cmdline options
+    #[clap(short='o', long, value_delimiter = ' ', num_args = 1..)]
+    pub options: Vec<String>
+}
 
 #[derive(Subcommand, Debug)]
 pub enum Commands {
