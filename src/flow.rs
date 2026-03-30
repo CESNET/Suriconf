@@ -1,22 +1,16 @@
 use byte_unit::{Byte, UnitType};
-use crate::structures::{Keys, ModuleResult, Analysis, Answer, Change, Reason, MemcapChange};
+use crate::structures::{Keys, ModuleResult, Analysis, Answer, Change, MemcapChange, Flow};
 use crate::module::Module;
 use std::collections::HashMap;
 use serde_json::{Value};
 use std::collections::BTreeMap;
-use crate::{FLOW_WINDOW, MAX_AVG_RATIO, LOAD_FACTOR, MIN_AVG_RATIO, FLOW_OBJECT, SYNC_AVG, FLOW_BUCKET, FLOW_LOCAL_THREAD_MAX};
+use crate::{FLOW_WINDOW, MAX_AVG_RATIO, LOAD_FACTOR, MIN_AVG_RATIO, FLOW_OBJECT, SYNC_AVG, FLOW_BUCKET, FLOW_LOCAL_THREAD_MAX, MULTIPLIER};
 
 #[derive(Debug)]
 pub struct FlowModule {
     pub questions: HashMap<Keys, Value>, // changed
     pub flow_map: BTreeMap<u64, Flow>,
     pub debug: bool
-}
-
-#[derive(Debug, Default)]
-pub struct Flow {
-    pub flow_count: i64,
-    pub hashes: BTreeMap<u64, i64>, // hash, count
 }
 
 #[derive(Debug, Default)]
@@ -108,7 +102,7 @@ impl Module for FlowModule {
         if self.debug {
             println!("Minimal slope: {min_slope}");
         }
-        self.sweep_line_algorithm(answers, *min_slope);
+        self.flow_map = self.sweep_line_algorithm(answers, *min_slope, self.debug);
 
          match self.get_prealloc(answers) {
              ModuleResult::Up|ModuleResult::Down => {
@@ -117,7 +111,7 @@ impl Module for FlowModule {
              ModuleResult::Ok => {}
         };
 
-       match  self.get_flow_hash_size(answers) {
+       match self.get_flow_hash_size(answers) {
            ModuleResult::Up | ModuleResult::Down =>  {
                let max_flow_active = self.get_max_flow_active();
                *self.questions.get_mut(&Keys::flow_hashsize).expect("Unable to get flow_hashsize from intern table.") = Value::Number(max_flow_active.next_power_of_two().into());
@@ -131,7 +125,7 @@ impl Module for FlowModule {
         }];
         
         if self.free_memcap(answers, &changes, self.debug) {
-            let flow_memcap = changes.iter().find(|a| a.keys == Keys::flow_memcap).expect("Unable to getf low_memcap from MemcapChange vector.").value;
+            let flow_memcap = changes.iter().find(|a| a.keys == Keys::flow_memcap).expect("Unable to get flow_memcap from MemcapChange vector.").value;
             *self.questions.get_mut(&Keys::flow_memcap).expect("Unable to get flow_memcap from intern table.") = Value::String(Byte::from_u64(flow_memcap)
                 .get_appropriate_unit(UnitType::Binary).to_string());    
         }
@@ -251,132 +245,9 @@ impl FlowModule {
         ModuleResult::Ok
     }
 
-    fn get_hash_from_flow_id(&self, flow_id: u64) -> u64 {
-        let bitmask:u64 = 0x0000FFFF;
-        let  mut flow_id = flow_id;
-        flow_id &= bitmask;
-        flow_id
-    }
-
-    fn get_timeout_from_stats(&self, answers: &Vec<Answer<'_>>, state: &str, proto: &str) -> u64 {
-         let key = match  proto {
-                "UDP" => {
-                    match state {
-                        "new" => {"flow_timeouts_udp_new"},
-                        "established" => {"flow_timeouts_udp_estab"},
-                        "bypassed" => {"flow_timeouts_udp_bypass"},
-                        "emergency-new" => {"flow_timeouts_udp_em_new"},
-                        "emergency-established" => {"flow_timeouts_udp_em_estab"},
-                        "emergency-bypassed" => {"flow_timeouts_udp_em_bypass"}
-                        _ => panic!("Unable to convert key string slice.")
-                    }
-                },
-                "TCP" => {
-                    match state {
-                        "new" => {"flow_timeouts_tcp_new"},
-                        "established" => {"flow_timeouts_tcp_estab"},
-                        "closed" => {"flow_timeouts_tcp_closed"},
-                        "bypassed" => {"flow_timeouts_tcp_bypass"},
-                        "emergency-new" => {"flow_timeouts_tcp_em_new"},
-                        "emergency-established" => {"flow_timeouts_tcp_em_estab"},
-                        "emergency-closed" => {"flow_timeouts_tcp_em_closed"},
-                        "emergency-bypassed" => {"flow_timeouts_tcp_em_bypass"}
-                        _ => panic!("Unable to convert key string slice.")
-                    }
-                },
-                "ICMP" => {
-                   match state {
-                       "new" => {"flow_timeouts_icmp_new"},
-                       "established" => {"flow_timeouts_icmp_estab"},
-                       "bypassed" => {"flow_timeouts_icmp_bypass"},
-                       "emergency-new" => {"flow_timeouts_icmp_em_new"},
-                       "emergency-established" => {"flow_timeouts_icmp_em_estab"},
-                       "emergency-bypassed" => {"flow_timeouts_icmp_em_bypass"}
-                       _ => panic!("Unable to convert key string slice.")
-                   }
-                },
-                _ => {
-                    match state {
-                        "new" => {"flow_timeouts_def_new"},
-                        "established" => {"flow_timeouts_def_estab"},
-                        "closed" => {"flow_timeouts_def_closed"},
-                        "bypassed" => {"flow_timeouts_def_bypass"},
-                        "emergency-new" => {"flow_timeouts_def_em_new"},
-                        "emergency-established" => {"flow_timeouts_def_em_estab"},
-                        "emergency-closed" => {"flow_timeouts_def_em_closed"},
-                        "emergency-bypassed" => {"flow_timeouts_def_em_bypass"}
-                        _ => panic!("Unable to convert key string slice.")
-                    }
-                }
-            };
-
-        let new_key = Keys::new(key);
-        answers.iter().find(|a| { a.key == &new_key}).expect(&format!("Unable to get {:?}", new_key)).value.as_u64().expect(&format!("Unable to transform {:?} to u64.", new_key))
-    }
-    
-    fn sweep_line_algorithm(&mut self, answers: &Vec<Answer<'_>>, min_slope: f64) {
-        if let Some(flows) = answers.iter().find(|a| { a.key == &Keys::flow_set}).and_then(|a| a.value.as_object()) {
-            for proto_flows in flows.values() {
-                if let Some(proto_flows) = proto_flows.as_array() {
-                    for proto_flow in proto_flows {
-                        if let Some(proto_flow) = proto_flow.as_object() {
-                            let start = proto_flow.get("start").and_then(|s| s.as_u64()).expect("Not able to find flow start in record.");
-                            let mut end = proto_flow.get("end").and_then(|s| s.as_u64()).expect("Not able to find flow end in record.");
-                            let flow_id = proto_flow.get("flow_id").and_then(|s| s.as_u64()).expect("Not able to find flow_id in record.");
-                            let hash = self.get_hash_from_flow_id(flow_id);
-                            let state = proto_flow.get("state").and_then(|s| s.as_str()).expect("Not able to find flow state in record.");
-                            let proto = proto_flow.get("proto").and_then(|s| s.as_str()).expect("Not able to find flow protocol in record.");
-                            let reason = Reason::new(proto_flow.get("reason").and_then(|s| s.as_str()).expect("Not able to find flow reason in record."));
-
-                            match reason {
-                                Reason::timeout | Reason::tcp_reuse | Reason::emergency   => {
-                                    let timeout_manager_check = self.get_timeout_from_stats(answers, state, proto);
-                                    end += timeout_manager_check + (1.0 / min_slope).ceil() as u64;
-                                },
-                                _ => {}
-                            }
-
-                            if start == end {
-                                end +=1;
-                            }
-
-                            let flow = self
-                                .flow_map
-                                .entry(start)
-                                .or_insert_with(Flow::default);
-
-                            flow.flow_count += 1;
-                            *flow.hashes.entry(hash).or_insert(0) += 1;
-
-                            let flow = self
-                                .flow_map
-                                .entry(end)
-                                .or_insert_with(Flow::default);
-
-                            flow.flow_count -= 1;
-                            *flow.hashes.entry(hash).or_insert(0) -= 1;
-
-                        } else {
-                            panic!("Unable to parse flow.");
-                        }
-                    }
-                } else {
-                    panic!("Unable to parse flows.");
-                }
-            }
-        }
-        else {
-            panic!("Unable to parse flows.");
-        }
-
-        if self.debug {
-            println!("flow_map:{:?}", self.flow_map)
-        }
-    }
-
-    fn get_flow_memcap(&mut self, answers: &Vec<Answer<'_>>) -> f64 { 
+    fn get_flow_memcap(&self, answers: &Vec<Answer<'_>>) -> f64 {
         let max_flow_active = self.get_suri_max_flow_active_stat(answers) as f64;
-        let mut workers: f64=  self.get_workers(answers);
+        let workers: f64=  self.get_workers(answers);
         
         // let mut management: f64 = 0.0;
         // management += self.get_recyclers_stat(answers);
@@ -386,9 +257,21 @@ impl FlowModule {
             println!("workers: {workers}");
         }
 
-        let hash_size = answers.iter().find(|a| {a.key == &Keys::flow_hashsize}).expect("Unable to get hash size of Flow table.").value.as_f64().expect("Unable to get hash_size as f64.");
+        let hash_size =
+            match self.questions.get(&Keys::flow_hashsize) {
+                Some(Value::Null) => {
+                    self.get_flow_hash_size_stat(answers)
+                },
+                Some(value) => {
+                    value.as_f64().expect("Unable to get flow hash_size as f64.")
+                }
+                _ => {
+                    panic!("Unable to get value for flow hash_size.")
+                }
+            };
+
         let prealloc=
-            match self.questions.get_mut(&Keys::flow_prealloc) {
+            match self.questions.get(&Keys::flow_prealloc) {
                 Some(Value::Null) => {
                     self.get_prealloc_stat(answers) as f64
                 },
@@ -400,6 +283,6 @@ impl FlowModule {
                 }
             };
 
-        hash_size*FLOW_BUCKET+(max_flow_active+prealloc*1.2+workers*FLOW_LOCAL_THREAD_MAX)*FLOW_OBJECT
+        hash_size*FLOW_BUCKET+(max_flow_active+prealloc*MULTIPLIER+workers*FLOW_LOCAL_THREAD_MAX)*FLOW_OBJECT
     }
 }

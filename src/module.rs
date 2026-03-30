@@ -1,9 +1,9 @@
 use byte_unit::Byte;
 use serde_json::Value;
-use std::collections::HashMap;
-use crate::{FLOW_WINDOW, MIN_RUN, PACKET, ROB_REGRESSION};
+use std::collections::{BTreeMap, HashMap};
+use crate::{FLOW_WINDOW, MIN_RUN, PACKET, ROB_REGRESSION, TCP_SEGMENT};
 use crate::regression::{my_huber_regression, my_theil_sen_regression};
-use crate::structures::{Analysis, Answer, Change, Keys, RobRegression, Thread, MemcapChange};
+use crate::structures::{Analysis, Answer, Change, Keys, RobRegression, Thread, MemcapChange, Reason, Flow};
 
 pub trait Module {
     fn new(analysis: &Analysis, debug: bool) -> Self where Self: Sized;
@@ -30,6 +30,10 @@ pub trait Module {
     fn get_uptime_stat(&self, answers: &Vec<Answer<'_>>) -> u64 {
         *answers.iter().find(|h| h.key == &Keys::uptime).expect("Unable to get uptime.").value
             .as_array().expect("Unable to create array from uptime record.").iter().map(|a| a.as_u64().expect("Unable to transform uptime to u64.")).collect::<Vec<u64>>().last().expect("Unable to get last uptime.")
+    }
+    
+    fn get_max_pending_packets(&self, answers: &Vec<Answer<'_>>) -> u64 {
+        answers.iter().find(|a | a.key == &Keys::max_pending_packets).and_then(|a| a.value.as_u64()).expect("Unable to get max_pending_packets as u64.")
     }
 
     fn get_thread_stat<'a>(&self, answers: &Vec<Answer<'a>>) -> &'a Vec<Value> {
@@ -71,7 +75,7 @@ pub trait Module {
         cpu_usages
     }
 
-    fn get_workers(&mut self, answers: &Vec<Answer<'_>>) -> f64{
+    fn get_workers(&self, answers: &Vec<Answer<'_>>) -> f64 {
         let threads = self.get_thread_stat(answers);
 
         let mut workers: f64= 0.0;
@@ -129,12 +133,11 @@ pub trait Module {
             .expect("Unable to get max_memory_usage as str.");
         let max_memory_usage= Byte::parse_str(max_memory_usage_str, true).ok().map(|b| b.as_u64()).expect("Unable to convert max_memory_usage_str to Bytes.");
 
-        let max_pending_packets = answers.iter().find(|a | a.key == &Keys::max_pending_packets).and_then(|a| a.value.as_u64())
-            .expect("Unable to get max_pending_packets as u64.");
+        let max_pending_packets = self.get_max_pending_packets(answers);
 
         let workers = self.get_workers(answers) as u64;
 
-        total_used+= workers*PACKET*max_pending_packets;
+        total_used+= workers*(PACKET as u64)*max_pending_packets;
 
         total_used += changes.iter().map(|c| c.value).sum::<u64>();
 
@@ -143,5 +146,132 @@ pub trait Module {
         }
 
         total_used <= max_memory_usage
+    }
+
+    fn sweep_line_algorithm(&mut self, answers: &Vec<Answer<'_>>, min_slope: f64, debug: bool) -> BTreeMap<u64, Flow> {
+        let mut flow_map: BTreeMap<u64, Flow> = Default::default();
+
+        if let Some(flows) = answers.iter().find(|a| { a.key == &Keys::flow_set}).and_then(|a| a.value.as_object()) {
+            for proto_flows in flows.values() {
+                if let Some(proto_flows) = proto_flows.as_array() {
+                    for proto_flow in proto_flows {
+                        if let Some(proto_flow) = proto_flow.as_object() {
+                            let start = proto_flow.get("start").and_then(|s| s.as_u64()).expect("Not able to find flow start in record.");
+                            let mut end = proto_flow.get("end").and_then(|s| s.as_u64()).expect("Not able to find flow end in record.");
+                            let flow_id = proto_flow.get("flow_id").and_then(|s| s.as_u64()).expect("Not able to find flow_id in record.");
+                            let hash = self.get_hash_from_flow_id(flow_id);
+                            let state = proto_flow.get("state").and_then(|s| s.as_str()).expect("Not able to find flow state in record.");
+                            let proto = proto_flow.get("proto").and_then(|s| s.as_str()).expect("Not able to find flow protocol in record.");
+                            let reason = Reason::new(proto_flow.get("reason").and_then(|s| s.as_str()).expect("Not able to find flow reason in record."));
+
+                            match reason {
+                                Reason::timeout | Reason::tcp_reuse | Reason::emergency   => {
+                                    let timeout_manager_check = self.get_timeout_from_stats(answers, state, proto);
+                                    end += timeout_manager_check + (1.0 / min_slope).ceil() as u64;
+                                },
+                                _ => {}
+                            }
+
+                            if start == end {
+                                end +=1;
+                            }
+
+                            let flow =
+                                flow_map
+                                .entry(start)
+                                .or_insert_with(Flow::default);
+
+                            flow.flow_count += 1;
+                            *flow.hashes.entry(hash).or_insert(0) += 1;
+
+                            let flow =
+                                flow_map
+                                .entry(end)
+                                .or_insert_with(Flow::default);
+
+
+                            flow.flow_count -= 1;
+                            *flow.hashes.entry(hash).or_insert(0) -= 1;
+
+                        } else {
+                            panic!("Unable to parse flow.");
+                        }
+                    }
+                } else {
+                    panic!("Unable to parse flows.");
+                }
+            }
+        }
+        else {
+            panic!("Unable to parse flows.");
+        }
+
+        if debug {
+            println!("flow_map:{:?}", flow_map)
+        }
+        flow_map
+    }
+
+    fn get_hash_from_flow_id(&self, flow_id: u64) -> u64 {
+        let bitmask:u64 = 0x0000FFFF;
+        let  mut flow_id = flow_id;
+        flow_id &= bitmask;
+        flow_id
+    }
+
+    fn get_timeout_from_stats(&self, answers: &Vec<Answer<'_>>, state: &str, proto: &str) -> u64 {
+        let key = match  proto {
+            "UDP" => {
+                match state {
+                    "new" => {"flow_timeouts_udp_new"},
+                    "established" => {"flow_timeouts_udp_estab"},
+                    "bypassed" => {"flow_timeouts_udp_bypass"},
+                    "emergency-new" => {"flow_timeouts_udp_em_new"},
+                    "emergency-established" => {"flow_timeouts_udp_em_estab"},
+                    "emergency-bypassed" => {"flow_timeouts_udp_em_bypass"}
+                    _ => panic!("Unable to convert key string slice.")
+                }
+            },
+            "TCP" => {
+                match state {
+                    "new" => {"flow_timeouts_tcp_new"},
+                    "established" => {"flow_timeouts_tcp_estab"},
+                    "closed" => {"flow_timeouts_tcp_closed"},
+                    "bypassed" => {"flow_timeouts_tcp_bypass"},
+                    "emergency-new" => {"flow_timeouts_tcp_em_new"},
+                    "emergency-established" => {"flow_timeouts_tcp_em_estab"},
+                    "emergency-closed" => {"flow_timeouts_tcp_em_closed"},
+                    "emergency-bypassed" => {"flow_timeouts_tcp_em_bypass"}
+                    _ => panic!("Unable to convert key string slice.")
+                }
+            },
+            "ICMP" => {
+                match state {
+                    "new" => {"flow_timeouts_icmp_new"},
+                    "established" => {"flow_timeouts_icmp_estab"},
+                    "bypassed" => {"flow_timeouts_icmp_bypass"},
+                    "emergency-new" => {"flow_timeouts_icmp_em_new"},
+                    "emergency-established" => {"flow_timeouts_icmp_em_estab"},
+                    "emergency-bypassed" => {"flow_timeouts_icmp_em_bypass"}
+                    _ => panic!("Unable to convert key string slice.")
+                }
+            },
+            _ => {
+                match state {
+                    "new" => {"flow_timeouts_def_new"},
+                    "established" => {"flow_timeouts_def_estab"},
+                    "closed" => {"flow_timeouts_def_closed"},
+                    "bypassed" => {"flow_timeouts_def_bypass"},
+                    "emergency-new" => {"flow_timeouts_def_em_new"},
+                    "emergency-established" => {"flow_timeouts_def_em_estab"},
+                    "emergency-closed" => {"flow_timeouts_def_em_closed"},
+                    "emergency-bypassed" => {"flow_timeouts_def_em_bypass"}
+                    _ => panic!("Unable to convert key string slice.")
+                }
+            }
+        };
+
+        let new_key = Keys::new(key);
+        answers.iter().find(|a| { a.key == &new_key}).expect(&format!("Unable to get {:?}", new_key)).value.as_u64().expect(&format!("Unable to transform {:?} to u64.", new_key))
     }
 }

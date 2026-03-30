@@ -1387,7 +1387,7 @@ max-pending-packets: 1024
 # Preallocated size for each packet. Default is 1514 which is the classical
 # size for pcap on Ethernet. You should adjust this value to the highest
 # packet size (MTU + hardware header) on your system.
-#default-packet-size: 1514
+default-packet-size: 1514
 
 # Unix command socket that can be used to pass commands to Suricata.
 # An external tool can then connect to get information from Suricata
@@ -1690,6 +1690,7 @@ stream:
   memcap: 64 MiB
   #memcap-policy: ignore
   checksum-validation: yes      # reject incorrect csums
+  prealloc-sessions: 2048
   #midstream: false
   #midstream-policy: ignore
   inline: auto                  # auto will use inline mode in IPS mode, yes or no set it statically
@@ -1705,7 +1706,7 @@ stream:
     randomize-chunk-size: yes
     #randomize-chunk-range: 10
     #raw: yes
-    #segment-prealloc: 2048
+    segment-prealloc: 2048
     #check-overlap-different-data: true
 
 # Host table:

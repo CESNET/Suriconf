@@ -73,6 +73,10 @@ pub struct Preconfiguration {
     threads_stat: Vec<Thread>,
     flow: FlowStructure,
     decoder: DecoderStructure,
+    ippair: IPPairStructure,
+    host: HostStructure,
+    tcp: TCPStructure,
+    defrag: DefragStructure,
     uptime: Vec<u64>,
     memcap_pressure: Vec<u64>,
     memcap_pressure_max: Vec<u64>
@@ -101,10 +105,44 @@ pub struct DecoderStructure {
 }
 
 #[derive(Serialize, Debug, Default)]
+pub struct IPPairStructure {
+    ippair_memuse: Vec<u64>,
+    ippair_active: Vec<u64>
+}
+
+#[derive(Serialize, Debug, Default)]
+pub struct HostStructure {
+    host_memuse: Vec<u64>,
+    host_active: Vec<u64>
+}
+
+#[derive(Serialize, Debug, Default)]
+pub struct TCPStructure {
+    tcp_active_sessions: Vec<u64>,
+    tcp_active_segments: Vec<u64>,
+    tcp_ssn_memcap_drop: Vec<u64>,
+    tcp_pkt_on_wrong_thread: Vec<u64>,
+    tcp_segment_memcap_drop: Vec<u64>,
+    tcp_reassembly_gap: Vec<u64>,
+    tcp_reassembly_memuse: Vec<u64>,
+}
+
+#[derive(Serialize, Debug, Default)]
+pub struct DefragStructure {
+    defrag_tracker_active: Vec<u64>,
+    defrag_max_fragments: Vec<u64>,
+    defrag_max_frags_reached: Vec<u64>,
+    defrag_max_trackers_reached: Vec<u64>,
+    defrag_tracker_hard_reuse: Vec<u64>
+}
+
+#[derive(Serialize, Debug, Default)]
 pub struct Flow {
     flow_id: u64,
     age: u64,
     packets: u64,
+    bytes_to_client: u64,
+    bytes_to_server: u64,
     start: u64,
     end: u64,
     state: String,
@@ -214,12 +252,76 @@ impl Preconfiguration {
 
                     if let None = self.find_decoder_avg_pkt_size(&value) {
                         return Err(Box::from("Unable to parse avg_pkt_size."))
-
                     }
 
                     if let None = self.find_decoder_max_pkt_size(&value) {
                         return Err(Box::from("Unable to parse max_pkt_size."))
                     }
+
+                    if let None = self.find_ippair_memuse(&value) {
+                        return Err(Box::from("Unable to parse ippair_memuse."))
+                    }
+
+                    if let None = self.find_ippair_active(&value) {
+                        return Err(Box::from("Unable to parse ippair_active."))
+                    }
+
+                    if let None = self.find_host_memuse(&value) {
+                        return Err(Box::from("Unable to parse host_memuse."))
+                    }
+
+                    if let None = self.find_host_active(&value) {
+                        return Err(Box::from("Unable to parse host_active."))
+                    }
+
+                    if let None = self.find_tcp_active_sessions(&value) {
+                        return Err(Box::from("Unable to parse tcp_active_sessions."))
+                    }
+
+                    if let None = self.find_tcp_active_segments(&value) {
+                        return Err(Box::from("Unable to parse tcp_active_segments."))
+                    }
+
+                    if let None = self.find_tcp_reassembly_memuse(&value) {
+                        return Err(Box::from("Unable to parse reassembly_memuse."))
+                    }
+
+                    if let None = self.find_tcp_ssn_memcap_drop(&value) {
+                        return Err(Box::from("Unable to parse tcp_ssn_memcap_drop."))
+                    }
+
+                    if let None = self.find_tcp_pkt_on_wrong_thread(&value) {
+                        return Err(Box::from("Unable to parse tcp_pkt_on_wrong_thread."))
+                    }
+
+                    if let None = self.find_tcp_segment_memcap_drop(&value) {
+                        return Err(Box::from("Unable to parse tcp_segment_memcap_drop."))
+                    }
+
+                    if let None = self.find_tcp_reassembly_gap(&value) {
+                        return Err(Box::from("Unable to parse tcp_reassembly_gap."))
+                    }
+
+                    if let None = self.find_defrag_tracker_active(&value) {
+                        return Err(Box::from("Unable to parse defrag_tracker_active."))
+                    }
+
+                    if let None = self.find_defrag_max_fragments(&value) {
+                        return Err(Box::from("Unable to parse defrag_max_fragments."))
+                    }
+
+                    if let None = self.find_defrag_max_frags_reached(&value) {
+                        return Err(Box::from("Unable to parse defrag_max_frags_reached."))
+                    }
+
+                    if let None = self.find_defrag_max_trackers_reached(&value) {
+                        return Err(Box::from("Unable to parse defrag_max_trackers_reached."))
+                    }
+
+                    if let None = self.find_defrag_tracker_hard_reuse(&value) {
+                        return Err(Box::from("Unable to parse defrag_tracker_hard_reuse."))
+                    }
+
                 },
                 Err(_) => { return Err(Box::from("Unable to parse stats.json.")) }
             }
@@ -328,6 +430,102 @@ impl Preconfiguration {
         Some(())
     }
 
+    pub fn find_ippair_memuse(&mut self, stats: &Value) -> Option<()> {
+        self.ippair.ippair_memuse.push(stats.get("stats").and_then(|h| h.get("ippair").
+            and_then(|m| m.get("memuse"))).and_then(|p| p.as_u64())?);
+        Some(())
+    }
+    pub fn find_ippair_active(&mut self, stats: &Value) -> Option<()> {
+        self.ippair.ippair_active.push(stats.get("stats").and_then(|h| h.get("ippair").
+            and_then(|m| m.get("active"))).and_then(|p| p.as_u64())?);
+        Some(())
+    }
+
+    pub fn find_host_memuse(&mut self, stats: &Value) -> Option<()> {
+        self.host.host_memuse.push(stats.get("stats").and_then(|h| h.get("host").
+            and_then(|m| m.get("memuse"))).and_then(|p| p.as_u64())?);
+        Some(())
+    }
+
+    pub fn find_host_active(&mut self, stats: &Value) -> Option<()> {
+        self.host.host_active.push(stats.get("stats").and_then(|h| h.get("host").
+            and_then(|m| m.get("active"))).and_then(|p| p.as_u64())?);
+        Some(())
+    }
+
+    pub fn find_tcp_active_sessions(&mut self, stats: &Value) -> Option<()> {
+        self.tcp.tcp_active_sessions.push(stats.get("stats").and_then(|h| h.get("tcp").
+            and_then(|m| m.get("active_sessions"))).and_then(|p| p.as_u64())?);
+        Some(())
+    }
+
+    pub fn find_tcp_active_segments(&mut self, stats: &Value) -> Option<()> {
+        self.tcp.tcp_active_segments.push(stats.get("stats").and_then(|h| h.get("tcp").
+            and_then(|m| m.get("reassembly_active_segments"))).and_then(|p| p.as_u64())?);
+        Some(())
+    }
+
+    pub fn find_tcp_reassembly_memuse(&mut self, stats: &Value) -> Option<()> {
+        self.tcp.tcp_reassembly_memuse.push(stats.get("stats").and_then(|h| h.get("tcp").
+            and_then(|m| m.get("reassembly_memuse"))).and_then(|p| p.as_u64())?);
+        Some(())
+    }
+
+    pub fn find_tcp_ssn_memcap_drop(&mut self, stats: &Value) -> Option<()> {
+        self.tcp.tcp_ssn_memcap_drop.push(stats.get("stats").and_then(|h| h.get("tcp").
+            and_then(|m| m.get("ssn_memcap_drop"))).and_then(|p| p.as_u64())?);
+        Some(())
+    }
+
+    pub fn find_tcp_pkt_on_wrong_thread(&mut self, stats: &Value) -> Option<()> {
+        self.tcp.tcp_pkt_on_wrong_thread.push(stats.get("stats").and_then(|h| h.get("tcp").
+            and_then(|m| m.get("pkt_on_wrong_thread"))).and_then(|p| p.as_u64())?);
+        Some(())
+    }
+
+    pub fn find_tcp_segment_memcap_drop(&mut self, stats: &Value) -> Option<()> {
+        self.tcp.tcp_segment_memcap_drop.push(stats.get("stats").and_then(|h| h.get("tcp").
+            and_then(|m| m.get("segment_memcap_drop"))).and_then(|p| p.as_u64())?);
+        Some(())
+    }
+
+    pub fn find_tcp_reassembly_gap(&mut self, stats: &Value) -> Option<()> {
+        self.tcp.tcp_reassembly_gap.push(stats.get("stats").and_then(|h| h.get("tcp").
+            and_then(|m| m.get("reassembly_gap"))).and_then(|p| p.as_u64())?);
+        Some(())
+    }
+
+    pub fn find_defrag_tracker_active(&mut self, stats: &Value) -> Option<()> {
+        self.defrag.defrag_tracker_active.push(stats.get("stats").and_then(|h| h.get("defrag").
+            and_then(|m| m.get("tracker_active"))).and_then(|p| p.as_u64())?);
+        Some(())
+    }
+
+    pub fn find_defrag_max_fragments(&mut self, stats: &Value) -> Option<()> {
+        self.defrag.defrag_max_fragments.push(stats.get("stats").and_then(|h| h.get("defrag").
+            and_then(|m| m.get("max_fragments"))).and_then(|p| p.as_u64())?);
+        Some(())
+    }
+
+    pub fn find_defrag_max_frags_reached(&mut self, stats: &Value) -> Option<()> {
+        self.defrag.defrag_max_frags_reached.push(stats.get("stats").and_then(|h| h.get("defrag").
+            and_then(|m| m.get("max_frags_reached"))).and_then(|p| p.as_u64())?);
+        Some(())
+    }
+
+
+    pub fn find_defrag_max_trackers_reached(&mut self, stats: &Value) -> Option<()> {
+        self.defrag.defrag_max_trackers_reached.push(stats.get("stats").and_then(|h| h.get("defrag").
+            and_then(|m| m.get("max_trackers_reached"))).and_then(|p| p.as_u64())?);
+        Some(())
+    }
+
+    pub fn find_defrag_tracker_hard_reuse(&mut self, stats: &Value) -> Option<()> {
+        self.defrag.defrag_tracker_hard_reuse.push(stats.get("stats").and_then(|h| h.get("defrag").
+            and_then(|m| m.get("tracker_hard_reuse"))).and_then(|p| p.as_u64())?);
+        Some(())
+    }
+
     pub fn get_flows(&mut self, json: BufReader<File>) -> Result<(), Box<dyn std::error::Error>> {
         let stream = Deserializer::from_reader(json).into_iter::<Value>();
         let mut proto_str: String;
@@ -372,6 +570,8 @@ impl Preconfiguration {
                     let age = flow.get("age").and_then(|f| f.as_u64()).ok_or("Cannot find a flow duration.")?;
                     let packets = flow.get("pkts_toserver").and_then(|f| f.as_u64()).ok_or("Cannot find packets to server.")? +
                         value.get("flow").and_then(|a| a.get("pkts_toclient")).and_then(|f| f.as_u64()).ok_or("Cannot find packets to client.")?;
+                    let bytes_to_client = flow.get("bytes_toclient").and_then(|f| f.as_u64()).ok_or("Cannot find bytes to client.")?;
+                    let bytes_to_server = flow.get("bytes_toserver").and_then(|f| f.as_u64()).ok_or("Cannot find packets bytes to server.")?;
                     let start = flow.get("start").ok_or("Cannot find start flow value").and_then(|s| self.find_flow_start_end_time(s, true))?;
                     let end = flow.get("end").ok_or("Cannot find end flow value").and_then(|e| self.find_flow_start_end_time(e, false))?;
                     let state = flow.get("state").and_then(|f| f.as_str()).ok_or("Cannot find a flow state.")?.to_string();
@@ -382,6 +582,8 @@ impl Preconfiguration {
                         flow_id,
                         age,
                         packets,
+                        bytes_to_client,
+                        bytes_to_server,
                         start,
                         end,
                         state,

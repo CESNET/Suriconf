@@ -17,11 +17,11 @@ mode:
     enabled: false
 
 modules:
-  - name: test_cpu_affinity
+  - name: cpu_affinity
     enabled: false
 
   - name: memory_usage
-    enabled: false
+    enabled: true
 
   - name: flow
     enabled: true

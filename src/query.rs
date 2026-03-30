@@ -134,12 +134,7 @@ impl Resources {
             if let Some(questions) = json.get("questions").and_then(|q| q.as_object()) {
                 for (key, value) in questions {
                     if let Some(Value::String(s)) = value.get("path_to_value") {
-                     let key =
-                        if key.as_str() == "prealloc" {
-                            Keys::new("flow_prealloc") // TODO colisions
-                        }else {
-                            Keys::new(key)
-                        };
+                    let key = Keys::new(key);
 
                         let question_part = QuestionPart {
                             file_path: s.clone(),

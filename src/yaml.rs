@@ -68,7 +68,7 @@ pub fn emergency_check_memcap(logs: &mut CreatedLogs, max_memory_usage: u64, wor
         total_used += Byte::parse_str(host_memcap_str, true).ok().map(|b| b.as_u64()).expect("Unable to convert host_memcap to Bytes.");
 
         let max_pending_packets = suricata_file.get("max-pending-packets").and_then(|m| m.as_u64()).expect("Unable to transform max-pending-packets as u64.");
-        total_used += workers*PACKET*max_pending_packets;
+        total_used += workers*(PACKET as u64)*max_pending_packets;
 
         let flow_memcap = suricata_file.get_mut("flow").and_then(|h| h.get_mut("memcap")).expect("Unable to get flow_memcap for emergency check.");
         let flow_memcap_str =  flow_memcap.as_str().expect("Unable to get flow_memcap as str.");
