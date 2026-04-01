@@ -84,6 +84,11 @@ pub fn emergency_check_memcap(logs: &mut CreatedLogs, max_memory_usage: u64, wor
             let new_flow_flow_memcap = free + flow_memcap_bytes;
             *flow_memcap = Value::String(Byte::from_u64(new_flow_flow_memcap)
                 .get_appropriate_unit(UnitType::Binary).to_string());
+
+            match close_yaml(&suricata_file, &logs.suri_configuration) {
+                Err(e) => {panic!("{e}")},
+                Ok(()) => {}
+            }
         }
 
         truncate_file(&logs.stats);

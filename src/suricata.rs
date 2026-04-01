@@ -117,6 +117,7 @@ pub fn execute_suricata<'a>(suriconf: &Suriconf, logs: &mut CreatedLogs, options
                         emergency_check_memcap(logs, suriconf.max_memory_usage, get_workers(&mut sys));
                         suricata_again = SuricataAgain::RunAgain;
                         kill_suricata(&mut child);
+                        kill.store(true, Ordering::SeqCst);
                         break;
                     }
                 }
@@ -218,7 +219,7 @@ fn get_cores_with_threads(suri_pid: i32, sys: &mut SystemVar) {
 }
 
 pub fn kill_suricata(child: &mut Child) {
-    let end_timeout = Duration::from_secs(10);
+    let end_timeout = Duration::from_secs(30);
     let pid = child.id();
     Command::new("sudo")
     .arg("pkill")
