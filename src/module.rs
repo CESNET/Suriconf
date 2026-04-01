@@ -1,7 +1,7 @@
 use byte_unit::Byte;
 use serde_json::Value;
 use std::collections::{BTreeMap, HashMap};
-use crate::{FLOW_WINDOW, MIN_RUN, PACKET, ROB_REGRESSION, TCP_SEGMENT};
+use crate::{FLOW_WINDOW, MIN_RUN, PACKET, ROB_REGRESSION};
 use crate::regression::{my_huber_regression, my_theil_sen_regression};
 use crate::structures::{Analysis, Answer, Change, Keys, RobRegression, Thread, MemcapChange, Reason, Flow};
 
@@ -34,6 +34,10 @@ pub trait Module {
     
     fn get_max_pending_packets(&self, answers: &Vec<Answer<'_>>) -> u64 {
         answers.iter().find(|a | a.key == &Keys::max_pending_packets).and_then(|a| a.value.as_u64()).expect("Unable to get max_pending_packets as u64.")
+    }
+
+    fn get_default_packet_size(&self, answers: &Vec<Answer<'_>>) -> u64 {
+        answers.iter().find(|a| a.key == &Keys::default_packet_size).expect("Unable to get default packet size.").value.as_u64().expect("Unable to get default packet size as u64.")
     }
 
     fn get_thread_stat<'a>(&self, answers: &Vec<Answer<'a>>) -> &'a Vec<Value> {
@@ -126,18 +130,28 @@ pub trait Module {
             let flow_memcap_str  = answers.iter().find(|a| a.key == &Keys::flow_memcap).and_then(|d| d.value.as_str())
                 .expect("Unable to get flow_memcap as str.");
             total_used += Byte::parse_str(flow_memcap_str, true).ok().map(|b| b.as_u64()).expect("Unable to convert flow_memcap to Bytes.");
-
         }
 
         let max_memory_usage_str = answers.iter().find(|a| a.key == &Keys::max_memory_usage).and_then(|d| d.value.as_str())
             .expect("Unable to get max_memory_usage as str.");
         let max_memory_usage= Byte::parse_str(max_memory_usage_str, true).ok().map(|b| b.as_u64()).expect("Unable to convert max_memory_usage_str to Bytes.");
 
-        let max_pending_packets = self.get_max_pending_packets(answers);
+
+        let max_pending_packets = if let Some(c) = changes.iter().find(|c| c.keys == Keys::max_pending_packets) {
+            c.value
+        } else {
+            self.get_max_pending_packets(answers)
+        };
+
+        let default_packet_size = if let Some(c) = changes.iter().find(|c| c.keys == Keys::default_packet_size) {
+            c.value
+        } else {
+            self.get_default_packet_size(answers)
+        };
 
         let workers = self.get_workers(answers) as u64;
 
-        total_used+= workers*(PACKET as u64)*max_pending_packets;
+        total_used+= workers*(PACKET as u64 + default_packet_size)*max_pending_packets;
 
         total_used += changes.iter().map(|c| c.value).sum::<u64>();
 

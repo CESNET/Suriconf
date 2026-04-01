@@ -3,7 +3,8 @@ use serde_json::Value;
 use std::collections::{BTreeMap, HashMap};
 use crate::structures::{Analysis, Answer, Change, Keys, Flow, MemcapChange};
 use crate::module::Module;
-use crate::{ACTIVE_LIMIT, HOST_HASHROW, IPPAIR_HASHROW, HOST_OBJECT, IPPAIR_OBJECT, MULTIPLIER, DEFRAG_TRACKER, DEFRAG_TRACKER_HASHROW, TCP_SESSION, TCP_STATE_QUEUE, STREAM_TCP_SACK_RECORD, FRAGMENTS, TCP_SEGMENT, MTU};
+use crate::{ACTIVE_LIMIT, HOST_HASHROW, IPPAIR_HASHROW, HOST_OBJECT, IPPAIR_OBJECT, MULTIPLIER, DEFRAG_TRACKER, DEFRAG_TRACKER_HASHROW, TCP_SESSION, TCP_STATE_QUEUE,
+            STREAM_TCP_SACK_RECORD, FRAGMENTS, TCP_SEGMENT, MTU, MAX_PENDING_PACKETS, DEFAULT_PACKET_SIZE};
 
 #[derive(Debug)]
 pub struct MemoryModule {
@@ -11,8 +12,6 @@ pub struct MemoryModule {
     pub flow_map: BTreeMap<u64, Flow>,
     pub debug: bool
 }
-
-// TODO zatim to vse menim, ale chce to predelat na load factor
 
 impl Module for MemoryModule {
     fn new(analysis: &Analysis, debug: bool) -> Self {
@@ -109,6 +108,8 @@ impl Module for MemoryModule {
         *self.questions.get_mut(&Keys::defrag_max_frags).expect("Unable to get defrag max fragments from intern table.") =
         Value::Number((self.get_ippair_host_defrag_hash_size(answers, &HashType::Defrag)*(self.get_max_fragments(answers) as u64)).into());
 
+        let (max_pending_packets, default_packet_size) = self.get_packet_structures(answers);
+
         let changes : Vec<MemcapChange> = vec![
             MemcapChange {
             keys: Keys::ippair_memcap,
@@ -130,6 +131,14 @@ impl Module for MemoryModule {
                 keys: Keys::reassembly_memcap,
                 value: self.get_reassembly_memcap(answers) as u64
             },
+            MemcapChange {
+                keys: Keys::max_pending_packets,
+                value: max_pending_packets
+            },
+            MemcapChange {
+                keys: Keys::default_packet_size,
+                value: default_packet_size
+            }
         ];
 
         if self.free_memcap(answers, &changes, self.debug) {
@@ -152,6 +161,14 @@ impl Module for MemoryModule {
             let reassembly_memcap = changes.iter().find(|a| a.keys == Keys::reassembly_memcap).expect("Unable to get reassembly_memcap from MemcapChange vector.").value;
             *self.questions.get_mut(&Keys::reassembly_memcap).expect("Unable to get reassembly_memcap from intern table.") = Value::String(Byte::from_u64(reassembly_memcap)
                 .get_appropriate_unit(UnitType::Binary).to_string());
+
+            let max_pending_packets = changes.iter().find(|a| a.keys == Keys::max_pending_packets).expect("Unable to get max_pending_packets from MemcapChange vector.").value;
+            *self.questions.get_mut(&Keys::max_pending_packets).expect("Unable to get max_pending_packets from intern table.") =
+            Value::Number(max_pending_packets.into());
+
+            let default_packet_size = changes.iter().find(|a| a.keys == Keys::default_packet_size).expect("Unable to get default_packet_size from MemcapChange vector.").value;
+            *self.questions.get_mut(&Keys::default_packet_size).expect("Unable to get default_packet_size from intern table.") =
+                Value::Number(default_packet_size.into());
 
         }
         else {
@@ -473,18 +490,77 @@ impl MemoryModule {
         answers.iter().find(|a| a.key == &Keys::avg_pkt_size).expect("Unable to get packet size average.").value.as_array().and_then(|arr| arr.iter().filter_map(|v| v.as_u64()).last()).expect("Unable to get packet size average.")
     }
 
-    fn get_default_packet_size_stat(&self, answers: &Vec<Answer<'_>>) -> u64 {
-        answers.iter().find(|a| a.key == &Keys::flow_prealloc).expect("Unable to get default packet size.").value.as_u64().expect("Unable to get default packet size as u64.")
-    }
+    fn get_packet_structures(&self, answers: &Vec<Answer<'_>>) -> (u64, u64) { // (max_pending_packets, default_packet_size)
+        let max_pending_packets: u64 = match MAX_PENDING_PACKETS {
+            MaxPendingPackets::ten_thousand => {
+                10000
+            }
+            MaxPendingPackets::fifteen_thousand => {
+                15000
+            }
+            MaxPendingPackets::twenty_thousand => {
+                20000
+            }
+            MaxPendingPackets::twenty_five_thousand => {
+                25000
+            }
+            MaxPendingPackets::thirty_thousand => {
+                30000
+            }
+            MaxPendingPackets::thirty_five_thousand => {
+                35000
+            }
+            MaxPendingPackets::forthy_thousand => {
+                40000
+            }
+            MaxPendingPackets::forthy_five_thousand => {
+                45000
+            }
+            MaxPendingPackets::fifthy_thousand => {
+                50000
+            }
+            MaxPendingPackets::fifthy_five_thousand => {
+                55000
+            }
+            MaxPendingPackets::sixty_thousand => {
+                60000
+            }
+            MaxPendingPackets::sixty_five_thousand => {
+                65000
+            }
+        };
 
-    // fn get_packet_structures(&self, answers: &Vec<Answer<'_>>) -> f64 {
-    //     let workers= self.get_workers(answers);
-    //     let max_pending_packets = self.get_max_pending_packets(answers) as f64;
-    //     let default_packet_size = self.get_default_packet_size_stat(answers) as f64;
-    //
-    //     // max pending packets -> 10 000 - 65000, 10000, 20000, 30000, 40000, 50000, 60000
-    //     // dps na 0
-    //     workers*max_pending_packets*(default_packet_size+PACKET)
-    // }
-    //
+        let default_packet_size = match  DEFAULT_PACKET_SIZE {
+            DefaultPacketSize::Zero => {0},
+            DefaultPacketSize::Average => {self.get_avg_packet_size(answers)},
+            DefaultPacketSize::Max => {self.get_max_packet_size(answers)}
+        };
+
+        if self.debug  {
+            println!("max_pending_packets: {max_pending_packets}, default_packet_size: {default_packet_size}");
+        }
+
+        (max_pending_packets, default_packet_size)
+    }
+}
+
+pub enum MaxPendingPackets {
+    ten_thousand,
+    fifteen_thousand,
+    twenty_thousand,
+    twenty_five_thousand,
+    thirty_thousand,
+    thirty_five_thousand,
+    forthy_thousand,
+    forthy_five_thousand,
+    fifthy_thousand,
+    fifthy_five_thousand,
+    sixty_thousand,
+    sixty_five_thousand
+}
+
+pub enum DefaultPacketSize {
+    Zero,
+    Average,
+    Max
 }

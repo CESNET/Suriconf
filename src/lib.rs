@@ -1,3 +1,4 @@
+use crate::memory_usage::{DefaultPacketSize, MaxPendingPackets};
 use crate::structures::RobRegression;
 
 macro_rules! mods {
@@ -42,6 +43,8 @@ static MULTIPLIER: f64 = 1.2;
 static FLOW_LOCAL_THREAD_MAX: f64 = 200.0;
 
 static ROB_REGRESSION: RobRegression = RobRegression::Huber;
+static MAX_PENDING_PACKETS: MaxPendingPackets = MaxPendingPackets::ten_thousand;
+static DEFAULT_PACKET_SIZE: DefaultPacketSize = DefaultPacketSize::Average;
 
 static CPU_USAGE_MAX: f32 = 95.0;
 static HUBER_THRESHOLD: f64 = 0.0;
