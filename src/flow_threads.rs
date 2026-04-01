@@ -252,10 +252,10 @@ impl  FlowThreadsModule {
             counter += 1;
 
             if self.debug {
-                println!("before queue_size: {}, record: {record}, counter: {counter}, sum: {sum}",  record * counter - sum);
+                println!("record: {record}, counter: {counter}, sum: {sum}");
             }
 
-            let queue_size = record * counter - sum; // (*record as i64) * (counter as i64) - sum).max(0);
+            let queue_size = (record * counter - sum).max(0);
 
             if self.debug {
                 println!("queue_size: {queue_size}.");
