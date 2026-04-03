@@ -8,13 +8,14 @@ use std::thread;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use strum_macros::{Display, EnumIter};
 use sysinfo::System;
 use crate::flow::FlowModule;
 use clap::{ValueEnum};
 use crate::flow_threads::FlowThreadsModule;
 use crate::module::Module;
+use crate::memory_usage::MemoryModule;
 
 pub enum Reason {
     timeout,
@@ -51,7 +52,7 @@ impl Modules {
             "flow_threads" => Modules::FlowThreads,
             "cpu_affinity" => Modules::CpuAffinity,
             "flow" => Modules::Flow,
-            "memory_module" => Modules::MemoryModule,
+            "memory_usage" => Modules::MemoryModule,
             _ => panic!("Unable to convert key string slice.")
         }
     }
@@ -65,6 +66,12 @@ pub enum CaptureMode {
 
 impl Default for CaptureMode {
     fn default() -> Self { CaptureMode::AF_PACKET }
+}
+
+#[derive(Debug, Default)]
+pub struct Flow {
+    pub flow_count: i64,
+    pub hashes: BTreeMap<u64, i64>, // hash, count
 }
 
 #[derive(Debug, PartialEq)]
@@ -137,6 +144,7 @@ pub fn create_module(module: &Modules, analysis: &Analysis, debug: bool) -> Box<
     match module {
         Modules::FlowThreads =>  Box::new(FlowThreadsModule::new(analysis, debug)),
         Modules::Flow => Box::new(FlowModule::new(analysis, debug)),
+        Modules::MemoryModule => Box::new(MemoryModule::new(analysis, debug)),
         _ => panic!("Unknown module."),
     }
 }
@@ -160,7 +168,15 @@ pub enum Keys { // JUST FOR FLOW
     stream_memcap,
     reassembly_memcap,
     ippair_memcap,
+    ippair_hashsize,
+    ippair_prealloc,
+    ippair_memuse,
+    ippair_active,
     host_memcap,
+    host_hashsize,
+    host_prealloc,
+    host_memuse,
+    host_active,
     flow_memcap,
     max_pending_packets,
     flow_memuse,
@@ -209,6 +225,25 @@ pub enum Keys { // JUST FOR FLOW
     flow_timeouts_icmp_em_bypass,
     avg_pkt_size,
     max_pkt_size,
+    tcp_active_sessions,
+    tcp_ssn_memcap_drop,
+    tcp_pkt_on_wrong_thread,
+    tcp_segment_memcap_drop,
+    tcp_reassembly_gap,
+    defrag_tracker_active,
+    defrag_max_fragments, // from stats
+    defrag_hashsize,
+    defrag_trackers,
+    defrag_max_frags,
+    defrag_prealloc,
+    default_packet_size,
+    stream_prealloc,
+    reassembly_prealloc,
+    tcp_active_segments,
+    tcp_reassembly_memuse,
+    defrag_max_frags_reached,
+    defrag_max_trackers_reached,
+    defrag_tracker_hard_reuse
 }
 
 impl Keys {
@@ -225,7 +260,15 @@ impl Keys {
             "stream_memcap" => Keys::stream_memcap,
             "reassembly_memcap" => Keys::reassembly_memcap,
             "ippair_memcap" => Keys::ippair_memcap,
+            "ippair_hashsize" => Keys::ippair_hashsize,
+            "ippair_prealloc" => Keys::ippair_prealloc,
+            "ippair_memuse" => Keys::ippair_memuse,
+            "ippair_active" => Keys::ippair_active,
             "host_memcap" => Keys::host_memcap,
+            "host_hashsize" => Keys::host_hashsize,
+            "host_prealloc" => Keys::host_prealloc,
+            "host_memuse" => Keys::host_memuse,
+            "host_active" => Keys::host_active,
             "max_pending_packets" => Keys::max_pending_packets,
             "flow_memcap" => Keys::flow_memcap,
             "flow_memuse" => Keys::flow_memuse,
@@ -274,6 +317,25 @@ impl Keys {
             "flow_timeouts_icmp_em_bypass" => Keys::flow_timeouts_icmp_em_bypass,
             "avg_pkt_size" => Keys::avg_pkt_size,
             "max_pkt_size" => Keys::max_pkt_size,
+            "tcp_active_sessions" => Keys::tcp_active_sessions,
+            "tcp_ssn_memcap_drop" => Keys::tcp_ssn_memcap_drop,
+            "tcp_pkt_on_wrong_thread" => Keys::tcp_pkt_on_wrong_thread,
+            "tcp_segment_memcap_drop" => Keys::tcp_segment_memcap_drop,
+            "tcp_reassembly_gap" => Keys::tcp_reassembly_gap,
+            "defrag_tracker_active" => Keys::defrag_tracker_active,
+            "defrag_max_fragments" => Keys::defrag_max_fragments,
+            "defrag_hashsize" => Keys::defrag_hashsize,
+            "defrag_trackers" => Keys::defrag_trackers,
+            "defrag_max_frags" => Keys::defrag_max_frags,
+            "defrag_prealloc"=> Keys::defrag_prealloc,
+            "default_packet_size" => Keys::default_packet_size,
+            "stream_prealloc" => Keys::stream_prealloc,
+            "reassembly_prealloc" => Keys::reassembly_prealloc,
+            "tcp_active_segments" => Keys::tcp_active_segments,
+            "tcp_reassembly_memuse" => Keys::tcp_reassembly_memuse,
+            "defrag_max_frags_reached" => Keys::defrag_max_frags_reached,
+            "defrag_max_trackers_reached" => Keys::defrag_max_trackers_reached,
+            "defrag_tracker_hard_reuse" => Keys::defrag_tracker_hard_reuse,
             _ => panic!("Unable to convert key string slice.")
         }
     }

@@ -12,8 +12,20 @@
     "ippair_memcap": {
       "path_to_value": "/ippair/memcap"
     },
+    "ippair_hashsize" : {
+      "path_to_value": "/ippair/hash-size"
+    },
+    "ippair_prealloc" : {
+      "path_to_value": "/ippair/prealloc"
+    },
     "host_memcap": {
       "path_to_value": "/host/memcap"
+    },
+    "host_hashsize" : {
+      "path_to_value": "/host/hash-size"
+    },
+    "host_prealloc" : {
+      "path_to_value": "/host/prealloc"
     },
     "flow_memcap": {
       "path_to_value": "/flow/memcap"
@@ -122,6 +134,27 @@
     },
     "flow_timeouts_icmp_em_bypass": {
       "path_to_value": "/flow-timeouts/icmp/emergency-bypassed"
+    },
+    "defrag_hashsize" : {
+      "path_to_value": "/defrag/hash-size"
+    },
+    "defrag_trackers" : {
+      "path_to_value": "/defrag/trackers"
+    },
+    "defrag_max_frags" : {
+      "path_to_value": "/defrag/max-frags"
+    },
+    "defrag_prealloc": {
+      "path_to_value": "/defrag/prealloc"
+    },
+    "default_packet_size" : {
+      "path_to_value": "/default-packet-size"
+    },
+    "stream_prealloc" : {
+      "path_to_value": "/stream/prealloc-sessions"
+    },
+    "reassembly_prealloc": {
+      "path_to_value": "/stream/reassembly/segment-prealloc"
     }
   }
 }

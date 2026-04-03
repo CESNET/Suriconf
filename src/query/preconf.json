@@ -3,6 +3,18 @@
     "flow_memuse": {
       "path_to_value": "/flow/flow_memuse"
     },
+    "ippair_memuse" : {
+      "path_to_value": "/ippair/ippair_memuse"
+    },
+    "ippair_active" : {
+      "path_to_value": "/ippair/ippair_active"
+    },
+    "host_memuse" : {
+      "path_to_value": "/host/host_memuse"
+    },
+    "host_active" : {
+      "path_to_value": "/host/host_active"
+    },
     "flow_set": {
       "path_to_value": "/flow/flows"
     },
@@ -44,13 +56,48 @@
     },
     "uptime": {
       "path_to_value": "/uptime"
-
     },
     "avg_pkt_size": {
-      "path_to_value": "decoder/avg_pkt_size"
+      "path_to_value": "/decoder/avg_pkt_size"
     },
     "max_pkt_size": {
-      "path_to_value": "decoder/max_pkt_size"
+      "path_to_value": "/decoder/max_pkt_size"
+    },
+    "tcp_active_sessions" : {
+      "path_to_value": "/tcp/tcp_active_sessions"
+    },
+    "tcp_ssn_memcap_drop" : {
+      "path_to_value": "/tcp/tcp_ssn_memcap_drop"
+    },
+    "tcp_pkt_on_wrong_thread" : {
+      "path_to_value": "/tcp/tcp_pkt_on_wrong_thread"
+    },
+    "tcp_segment_memcap_drop" : {
+      "path_to_value": "/tcp/tcp_segment_memcap_drop"
+    },
+    "tcp_reassembly_gap" : {
+      "path_to_value": "/tcp/tcp_reassembly_gap"
+    },
+    "tcp_active_segments" :{
+      "path_to_value": "/tcp/tcp_active_segments"
+    },
+    "tcp_reassembly_memuse" : {
+      "path_to_value": "/tcp/tcp_reassembly_memuse"
+    },
+    "defrag_tracker_active" : {
+      "path_to_value": "/defrag/defrag_tracker_active"
+    },
+    "defrag_max_fragments" : {
+      "path_to_value": "/defrag/defrag_max_fragments"
+    },
+    "defrag_max_frags_reached" : {
+      "path_to_value": "/defrag/defrag_max_frags_reached"
+    },
+    "defrag_max_trackers_reached" : {
+      "path_to_value": "/defrag/defrag_max_trackers_reached"
+    },
+    "defrag_tracker_hard_reuse" : {
+      "path_to_value": "/defrag/defrag_tracker_hard_reuse"
     }
   }
 }
