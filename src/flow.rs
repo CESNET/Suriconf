@@ -78,7 +78,9 @@ impl Module for FlowModule {
             Keys::flow_timeouts_icmp_bypass,
             Keys::flow_timeouts_icmp_em_new,
             Keys::flow_timeouts_icmp_em_estab,
-            Keys::flow_timeouts_icmp_em_bypass
+            Keys::flow_timeouts_icmp_em_bypass, 
+            Keys::max_pending_packets,
+            Keys::default_packet_size
         ];
 
         let questions: HashMap<Keys, Value> =

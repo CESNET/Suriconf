@@ -56,7 +56,7 @@ impl Module for MemoryModule {
             Keys::tcp_reassembly_memuse,
             Keys::defrag_max_frags_reached,
             Keys::defrag_max_trackers_reached,
-            Keys::defrag_tracker_hard_reuse
+            Keys::defrag_tracker_hard_reuse,
 
         ];
 
