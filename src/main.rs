@@ -3,9 +3,10 @@ use suriconf::argument::Args;
 use suriconf::yaml;
 use suriconf::yaml::{Suriconf};
 use suriconf::json::Preconfiguration;
-use suriconf::structures::{CreatedLogs, JsonVar, SuricataAgain};
+use suriconf::structures::{CreatedLogs, JsonVar, Modules, SuricataAgain};
 use suriconf::suricata;
 use suriconf::query::Resources;
+
 #[allow(unused_variables)]
 fn main() {
 
@@ -49,6 +50,34 @@ fn main() {
         },
         Ok(()) => {}
     }
+    
+    match suriconf.find_ethtool_executable_file() {
+        Err(e) => {
+            panic!("{}", e);
+        },
+        Ok(()) => {}
+    }
+
+    match suriconf.find_ifconfig_executable_file() {
+        Err(e) => {
+            panic!("{}", e);
+        },
+        Ok(()) => {}
+    }
+    
+    match suriconf.find_ip_executable_file() {
+        Err(e) => {
+            panic!("{}", e);
+        },
+        Ok(()) => {}
+    }
+
+    match suriconf.check_read_write_for_log_dir() {
+        Err(e) => {
+            panic!("{}", e);
+        },
+        Ok(()) => {}
+    }
 
     let mut logs = CreatedLogs::new(&suriconf.log_dir);
     yaml::close_yaml(&suricata_string, &logs.suri_configuration).unwrap();
@@ -73,7 +102,7 @@ fn main() {
     };
 
     // PRECONFIGURATION
-    let mut preconfiguration = Preconfiguration::new(sys.threads);
+    let mut preconfiguration = Preconfiguration::new(sys);
     match preconfiguration.create_preconfiguration_structure_and_save(&logs) {
         Err(e) => {
             panic!("{}", e);

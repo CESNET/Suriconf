@@ -51,6 +51,9 @@
     "wrk_cpu_set" : {
       "path_to_value": "/threading/cpu-affinity/worker-cpu-set/interface-specific-cpu-set/var_index/cpu"
     },
+    "af_packet_interface_threads" : {
+      "path_to_value": "/af-packet/var_index/threads"
+    },
     "flow_timeouts_def_new": {
       "path_to_value": "/flow-timeouts/default/new"
     },

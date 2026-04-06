@@ -16,6 +16,8 @@ use clap::{ValueEnum};
 use crate::flow_threads::FlowThreadsModule;
 use crate::module::Module;
 use crate::memory_usage::MemoryModule;
+use crate::cpu_affinity::CpuAffinityModule;
+use crate::json::CpuThread;
 
 pub enum Reason {
     timeout,
@@ -120,7 +122,8 @@ pub enum ModuleResult {
 #[derive(Default, Debug)]
 pub struct SystemVar {
     pub sys: System,
-    pub threads: Vec<Thread>
+    pub threads: Vec<Thread>, 
+    pub ethtool_stat: Vec<CpuThread>
 }
 
 #[derive(Deserialize, Serialize, PartialEq, Default, Debug)]
@@ -145,6 +148,7 @@ pub fn create_module(module: &Modules, analysis: &Analysis, debug: bool) -> Box<
         Modules::FlowThreads =>  Box::new(FlowThreadsModule::new(analysis, debug)),
         Modules::Flow => Box::new(FlowModule::new(analysis, debug)),
         Modules::MemoryModule => Box::new(MemoryModule::new(analysis, debug)),
+        Modules::CpuAffinity => Box::new(CpuAffinityModule::new(analysis, debug)),
         _ => panic!("Unknown module."),
     }
 }
@@ -243,7 +247,19 @@ pub enum Keys { // JUST FOR FLOW
     tcp_reassembly_memuse,
     defrag_max_frags_reached,
     defrag_max_trackers_reached,
-    defrag_tracker_hard_reuse
+    defrag_tracker_hard_reuse,
+    interface,
+    capture_mode,
+    capture_kernel_drops,
+    capture_errors,
+    capture_kernel_packets,
+    decoder_pkts,
+    decoder_invalid,
+    ethtool,
+    ifconfig,
+    ip,
+    ethtool_stat,
+    af_packet_interface_threads
 }
 
 impl Keys {
@@ -336,6 +352,18 @@ impl Keys {
             "defrag_max_frags_reached" => Keys::defrag_max_frags_reached,
             "defrag_max_trackers_reached" => Keys::defrag_max_trackers_reached,
             "defrag_tracker_hard_reuse" => Keys::defrag_tracker_hard_reuse,
+            "interface" => Keys::interface,
+            "capture_mode" => Keys::capture_mode,
+            "capture_kernel_drops" => Keys::capture_kernel_drops,
+            "capture_errors" => Keys::capture_errors,
+            "capture_kernel_packets" => Keys::capture_kernel_packets,
+            "decoder_pkts" => Keys::decoder_pkts,
+            "decoder_invalid" => Keys::decoder_invalid,
+            "ethtool" => Keys::ethtool,
+            "ifconfig" => Keys::ifconfig,
+            "ip" => Keys::ip,
+            "ethtool_stat" => Keys::ethtool_stat,
+            "af_packet_interface_threads" => Keys::af_packet_interface_threads,
             _ => panic!("Unable to convert key string slice.")
         }
     }

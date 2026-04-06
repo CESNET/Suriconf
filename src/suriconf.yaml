@@ -5,8 +5,12 @@ suriconf-version: 1.0
 
 suri-configuration: suricata.yaml
 suricata-bin: /usr/bin/suricata
+ethtool-bin: /usr/bin/ethtool
+ifconfig-bin: /usr/sbin/ifconfig
+ip-bin: /usr/sbin/ip
 log-dir: /var/log/suricata/
 preconf-time: 360 # in seconds
+# 360 is minimum for flow_threads module
 analysis: static # static/dynamic 
 
 mode:
@@ -18,19 +22,19 @@ mode:
 
 modules:
   - name: cpu_affinity
-    enabled: false
+    enabled: true
 
   - name: memory_usage
-    enabled: true
+    enabled: false
 
   - name: flow
-    enabled: true
+    enabled: false
 
   - name: flow_threads
-    enabled: true
+    enabled: false
 
 variables:
   interface: wlan0
   capture_mode: af_packet # dpdk
-  max_memory_usage: 1 GiB #there has to be space
-  max_cpu_usage_vec: [7, 8, 9, 10, 0, 1, 2, 3, 4, 5, 6 ]
+  max_memory_usage: 1 GiB
+  max_cpu_usage_vec: [0, 1, 2, 3, 4, 5, 6]

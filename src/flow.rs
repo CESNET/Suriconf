@@ -80,7 +80,8 @@ impl Module for FlowModule {
             Keys::flow_timeouts_icmp_em_estab,
             Keys::flow_timeouts_icmp_em_bypass, 
             Keys::max_pending_packets,
-            Keys::default_packet_size
+            Keys::default_packet_size, 
+            Keys::wrk_cpu_set
         ];
 
         let questions: HashMap<Keys, Value> =
@@ -249,11 +250,7 @@ impl FlowModule {
 
     fn get_flow_memcap(&self, answers: &Vec<Answer<'_>>) -> f64 {
         let max_flow_active = self.get_suri_max_flow_active_stat(answers) as f64;
-        let workers: f64=  self.get_workers(answers);
-        
-        // let mut management: f64 = 0.0;
-        // management += self.get_recyclers_stat(answers);
-        // management += self.get_managers_stat(answers);
+        let workers: f64=  self.get_new_workers(answers);
 
         if self.debug {
             println!("workers: {workers}");

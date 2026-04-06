@@ -4,7 +4,7 @@ use std::path::{PathBuf};
 use crate::structures::{Keys, FileNames, create_module, JsonVar, Answer, Change, Modules};
 use strum::IntoEnumIterator;
 use crate::yaml::{Suriconf};
-use serde_json::{Value};
+use serde_json::{Value, Number};
 use std::fs;
 use std::time::SystemTime;
 use crate::{yaml};
@@ -172,8 +172,9 @@ impl Resources {
         }
         suricata_result_path.push(format!("suricata_result{}.yaml", datetime.format("-%Y-%m-%d-%H:%M:%S")));
 
-        let suricata_result = yaml::json_to_yaml(jsons.suricata);
-        
+        let mut suricata_result = yaml::json_to_yaml(jsons.suricata);
+        yaml::fix_interface_cpu_set(&mut suricata_result);
+
         match yaml::close_yaml(&suricata_result, &suricata_result_path) {
             Err(e) => {panic!("{e}")},
             Ok(()) => {}
@@ -257,42 +258,78 @@ impl Resources {
     }
 
     pub fn write_changes(&self, jsons: &mut Jsons) {
-        let mut change_management_set = false;
         let mut change_management_count = 0;
+        let mut wrk_cpu_set: Vec<u64> = Vec::new();
         let suricata_table = self.tables.iter().find(|a| a.file_name == FileNames::suricata).expect("Unable to find Suricata table.");
         for question in &suricata_table.questions {
-            if matches!(question.0, Keys::flow_managers | Keys::flow_recyclers) && question.1.value != Value::Null {
+            if matches!(question.0, Keys::flow_managers | Keys::flow_recyclers) {
                 change_management_count += question.1.value.as_u64().expect("Unable to get recycler or manager count as u64.")
-
             }
+            if *question.0 == Keys::wrk_cpu_set {
+                wrk_cpu_set = question.1.value.as_array().expect("Unable to get wrk_cpu_set.")
+                    .iter().map(|a| a.as_u64().expect("Expected u64")).collect();
+            }
+
             if question.1.changed {
-                if matches!(question.0, Keys::flow_managers | Keys::flow_recyclers) {
-                    change_management_set = true
-                }
                 let change = find_in_json_with_path_mut(&mut jsons.suricata, question.1.file_path.as_str());
                 *change = question.1.value.clone();
             }
         }
-        if change_management_set {
-            self.change_management_cpu_set(&mut jsons.suricata, change_management_count);
+        self.change_management_cpu_set(&mut jsons.suricata, change_management_count, wrk_cpu_set);
+        self.disable_preconfiguration_logging(&mut jsons.suricata);
+    }
+
+    pub fn change_management_cpu_set(&self, file_value: &mut Value, change_management_count: u64, wrk_cpu_set: Vec<u64>) {
+        let management_set = file_value.get_mut("threading").expect("Unable to get threading section.")
+            .get_mut("cpu-affinity").and_then(|m| m.get_mut("management-cpu-set")).expect("Unable to parse management-cpu-set.")
+            .get_mut("cpu").expect("Unable to get cpus for management-cpu-set.");
+
+        let mut new_managemet_set: Vec<u64> = Vec::new();
+
+        let max_cpu_usage_vec = self.suriconf_struct.max_cpu_usage_vec.clone();
+        if self.suriconf_struct.modules.contains(&Modules::CpuAffinity) && self.suriconf_struct.modules.contains(&Modules::FlowThreads) {
+            let mut cpu_counter = 0;
+            for cpu in &max_cpu_usage_vec {
+                if !wrk_cpu_set.contains(cpu) {
+                    new_managemet_set.push(*cpu);
+                    cpu_counter += 1;
+                }
+                if cpu_counter == change_management_count {
+                    break
+                }
+            }
+
+            if cpu_counter != change_management_count {
+                panic!("Unable to configure Suricata, not enough cpu cores for management.")
+            }
+            *management_set = new_managemet_set.iter().map(|a| Value::Number(Number::from(*a))).collect()
+        }
+
+        else if self.suriconf_struct.modules.contains(&Modules::FlowThreads) {
+            if change_management_count > max_cpu_usage_vec.iter().len() as u64 {
+                panic!("Unable to configure Suricata, not enough cpu cores for management.")
+            }
+            new_managemet_set = max_cpu_usage_vec[..change_management_count as usize].to_vec();
+            *management_set = new_managemet_set.iter().map(|a| Value::Number(Number::from(*a))).collect()
+
         }
     }
 
-    pub fn change_management_cpu_set(&self, file_value: &mut Value, change_management_count: u64) {
-
-        let management_set = file_value.get_mut("threading").expect("Unable to get threading section.")
-            .get_mut("cpu-affinity").and_then(|m| m.get_mut("management-cpu-set")).expect("Unable to parse management-cpu-set.");
-
-        assert!(self.suriconf_struct.max_cpu_usage_vec.len() >=  change_management_count as usize, "Cpu set is not enough for management threads.");
-
-        let management_threads: Vec<Value> = self.suriconf_struct.max_cpu_usage_vec.get(0..change_management_count as  usize).expect("Unable to set manager thread.")
-            .iter().map(|&x| Value::from(x)).collect();
-        let cpus = management_set.get_mut("cpu").expect("Unable to get cpus for management-cpu-set.");
-
-        *cpus = Value::Array(management_threads);
-    }
-
-    pub fn suggest_changes() {
-
+    pub fn disable_preconfiguration_logging(&self, file_value: &mut Value) {
+        if let Some(outputs) = file_value.get_mut("outputs").and_then(|v| v.as_array_mut()) {
+            for output in outputs.iter_mut() {
+                if let Some(obj) = output.as_object_mut() {
+                    if let Some(eve_log) = obj.get_mut("eve-log") {
+                        if let Some(eve_obj) = eve_log.as_object_mut() {
+                            if let Some(filename) = eve_obj.get("filename").and_then(|f| f.as_str()) {
+                                if filename == "flows.json" || filename == "stats.json" {
+                                    eve_obj.insert("enabled".to_string(), Value::String("no".to_string()));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }

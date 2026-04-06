@@ -27,7 +27,8 @@ impl Module for FlowThreadsModule {
             Keys::flow_rc_queue_avg,
             Keys::flow_rc_recycled,
             Keys::threads_stat,
-            Keys::flow_mgr_full_hash_pass
+            Keys::flow_mgr_full_hash_pass,
+            Keys::wrk_cpu_set
         ];
 
         let questions: HashMap<Keys, Value> =
@@ -216,7 +217,8 @@ impl  FlowThreadsModule {
                 slope_vector.push(tmp_slope_vector.iter().sum::<f64>() / tmp_slope_vector.len() as f64);
             }
 
-            if current_flow_mgr_full_result.last() == flow_mgr_full_result.last() {
+            let last_three = flow_mgr_full_result.iter().rev().take(3).collect::<Vec<_>>();
+            if last_three.contains(&current_flow_mgr_full_result.last().expect("Unable to get last element from current_flow_mgr_full_result vector."))  {
                 break;
             }
             counter +=1;
@@ -255,7 +257,7 @@ impl  FlowThreadsModule {
                 println!("record: {record}, counter: {counter}, sum: {sum}");
             }
 
-            let queue_size = (record * counter - sum).max(0);
+            let queue_size = (record * counter).saturating_sub(sum);
 
             if self.debug {
                 println!("queue_size: {queue_size}.");
