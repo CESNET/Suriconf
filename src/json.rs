@@ -5,7 +5,7 @@ use serde_json::{Deserializer, Value};
 use std::collections::HashMap;
 use serde::Serialize;
 use chrono::{DateTime, FixedOffset};
-use crate::structures::{AppLayerProtocols, TrasportProtocols, CreatedLogs, Thread};
+use crate::structures::{AppLayerProtocols, TrasportProtocols, CreatedLogs, Thread, SystemVar};
 
 pub fn open_json(file: &PathBuf) -> Result<BufReader<File>, Box<dyn std::error::Error>> {
     let file = File::open(file)?;
@@ -71,6 +71,7 @@ pub fn find_emerg_mode_entered(stats: &Value) -> Option<bool> {
 #[derive(Serialize, Debug, Default)]
 pub struct Preconfiguration {
     threads_stat: Vec<Thread>,
+    ethtool_stat: Vec<CpuThread>,
     flow: FlowStructure,
     decoder: DecoderStructure,
     ippair: IPPairStructure,
@@ -78,6 +79,7 @@ pub struct Preconfiguration {
     tcp: TCPStructure,
     defrag: DefragStructure,
     uptime: Vec<u64>,
+    cpu: CpuStructure,
     memcap_pressure: Vec<u64>,
     memcap_pressure_max: Vec<u64>
 }
@@ -137,6 +139,21 @@ pub struct DefragStructure {
 }
 
 #[derive(Serialize, Debug, Default)]
+pub struct CpuStructure {
+    capture_kernel_drops: Vec<CpuThread>,
+    capture_errors: Vec<CpuThread>,
+    capture_kernel_packets: Vec<CpuThread>,
+    decoder_pkts: Vec<CpuThread>,
+    decoder_invalid: Vec<CpuThread>
+}
+
+#[derive(Serialize, Debug, Default)]
+pub struct CpuThread {
+    pub name: String,
+    pub value: Vec<u64>
+}
+
+#[derive(Serialize, Debug, Default)]
 pub struct Flow {
     flow_id: u64,
     age: u64,
@@ -151,9 +168,10 @@ pub struct Flow {
 }
 
 impl Preconfiguration {
-    pub fn new(threads: Vec<Thread>) -> Self {
+    pub fn new(sys: SystemVar) -> Self {
         let mut preconf = Self::default();
-        preconf.threads_stat = threads;
+        preconf.threads_stat = sys.threads;
+        preconf.ethtool_stat = sys.ethtool_stat;
         preconf
     }
 
@@ -322,6 +340,25 @@ impl Preconfiguration {
                         return Err(Box::from("Unable to parse defrag_tracker_hard_reuse."))
                     }
 
+                    if let None = self.find_capture_kernel_drops(&value) {
+                        return Err(Box::from("Unable to parse capture_kernel_drops."))
+                    }
+
+                    if let None = self.find_capture_errors(&value) {
+                        return Err(Box::from("Unable to parse capture_errors."))
+                    }
+
+                    if let None = self.find_capture_kernel_packets(&value) {
+                        return Err(Box::from("Unable to parse capture_kernel_packets."))
+                    }
+
+                    if let None = self.find_decoder_pkts(&value) {
+                        return Err(Box::from("Unable to parse decoder_pkts."))
+                    }
+
+                    if let None = self.find_decoder_invalid(&value) {
+                        return Err(Box::from("Unable to parse decoder_invalid."))
+                    }
                 },
                 Err(_) => { return Err(Box::from("Unable to parse stats.json.")) }
             }
@@ -523,6 +560,91 @@ impl Preconfiguration {
     pub fn find_defrag_tracker_hard_reuse(&mut self, stats: &Value) -> Option<()> {
         self.defrag.defrag_tracker_hard_reuse.push(stats.get("stats").and_then(|h| h.get("defrag").
             and_then(|m| m.get("tracker_hard_reuse"))).and_then(|p| p.as_u64())?);
+        Some(())
+    }
+
+    pub fn find_capture_kernel_drops(&mut self, stats: &Value) -> Option<()> {
+        let threads = stats.get("stats").and_then(|h| h.get("threads"))?.as_object()?;
+        for (name, value) in threads {
+            if !name.starts_with("W") {
+                continue;
+            }
+            let value = value.get("capture").and_then(|h| h.get("kernel_drops"))?.as_u64()?;
+            if let Some(found_thread) = self.cpu.capture_kernel_drops.iter_mut().find(|t| &t.name == name) {
+                found_thread.value.push(value)
+
+            } else {
+                self.cpu.capture_kernel_drops.push(CpuThread { name: name.to_string(), value: vec![value] })
+            }
+        }
+        Some(())
+    }
+
+    pub fn find_capture_errors(&mut self, stats: &Value) -> Option<()> {
+        let threads = stats.get("stats").and_then(|h| h.get("threads"))?.as_object()?;
+        for (name, value) in threads {
+            if !name.starts_with("W") {
+                continue;
+            }
+            let value = value.get("capture").and_then(|h| h.get("errors"))?.as_u64()?;
+            if let Some(found_thread) = self.cpu.capture_errors.iter_mut().find(|t| &t.name == name) {
+                found_thread.value.push(value)
+
+            } else {
+                self.cpu.capture_errors.push(CpuThread { name: name.to_string(), value: vec![value] })
+            }
+        }
+        Some(())
+    }
+
+    pub fn find_capture_kernel_packets(&mut self, stats: &Value) -> Option<()> {
+        let threads = stats.get("stats").and_then(|h| h.get("threads"))?.as_object()?;
+        for (name, value) in threads {
+            if !name.starts_with("W") {
+                continue;
+            }
+            let value = value.get("capture").and_then(|h| h.get("kernel_packets"))?.as_u64()?;
+            if let Some(found_thread) = self.cpu.capture_kernel_packets.iter_mut().find(|t| &t.name == name) {
+                found_thread.value.push(value)
+
+            } else {
+                self.cpu.capture_kernel_packets.push(CpuThread { name: name.to_string(), value: vec![value] })
+            }
+        }
+        Some(())
+    }
+
+    pub fn find_decoder_pkts(&mut self, stats: &Value) -> Option<()> {
+        let threads = stats.get("stats").and_then(|h| h.get("threads"))?.as_object()?;
+        for (name, value) in threads {
+            if !name.starts_with("W") {
+                continue;
+            }
+            let value = value.get("decoder").and_then(|h| h.get("pkts"))?.as_u64()?;
+            if let Some(found_thread) = self.cpu.decoder_pkts.iter_mut().find(|t| &t.name == name) {
+                found_thread.value.push(value)
+
+            } else {
+                self.cpu.decoder_pkts.push(CpuThread { name: name.to_string(), value: vec![value] })
+            }
+        }
+        Some(())
+    }
+
+    pub fn find_decoder_invalid(&mut self, stats: &Value) -> Option<()> {
+        let threads = stats.get("stats").and_then(|h| h.get("threads"))?.as_object()?;
+        for (name, value) in threads {
+            if !name.starts_with("W") {
+                continue;
+            }
+            let value = value.get("decoder").and_then(|h| h.get("invalid"))?.as_u64()?;
+            if let Some(found_thread) = self.cpu.decoder_invalid.iter_mut().find(|t| &t.name == name) {
+                found_thread.value.push(value)
+
+            } else {
+                self.cpu.decoder_invalid.push(CpuThread { name: name.to_string(), value: vec![value] })
+            }
+        }
         Some(())
     }
 

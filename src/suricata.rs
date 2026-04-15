@@ -1,8 +1,8 @@
 use std::path::PathBuf;
 use std::process::{Child, Command};
 use crate::yaml::{emergency_check_memcap, Suriconf};
-use crate::{json, FLOW_WINDOW, WINDOWS};
-use crate::json::{check_emergency, Preconfiguration};
+use crate::{json, FLOW_WINDOW, WINDOWS, MIN_RUN};
+use crate::json::{check_emergency, CpuThread, Preconfiguration};
 use crate::structures::{Thread, SystemVar, CreatedLogs, CaptureMode, SuricataAgain, Modules};
 use is_executable::IsExecutable;
 use std::time::Duration;
@@ -20,10 +20,12 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 pub fn execute_suricata<'a>(suriconf: &Suriconf, logs: &mut CreatedLogs, options: &Vec<String>) -> Option<(SystemVar, SuricataAgain)> {
     let sys = Arc::new(Mutex::new(SystemVar::default()));
-    let sys_thread = Arc::clone(&sys);
+    let sys_thread1 = Arc::clone(&sys);
+    let sys_thread2 = Arc::clone(&sys);
 
     let kill = Arc::new(AtomicBool::new(false));
-    let kill_thread = Arc::clone(&kill);
+    let kill_thread1 = Arc::clone(&kill);
+    let kill_thread2 = Arc::clone(&kill);
 
     let mut suricata_again = SuricataAgain::default();
 
@@ -31,10 +33,7 @@ pub fn execute_suricata<'a>(suriconf: &Suriconf, logs: &mut CreatedLogs, options
     get_capture_mode(suriconf, &mut vec_of_sur_cmd);
 
     if cfg!(target_os = "windows") {
-        Command::new("cmd")
-            .args(["/C", "echo hello"])
-            .status()
-            .expect("failed to execute process");
+       todo!()
     } else {
         if !suriconf.suricata_bin.is_executable() {
             panic!("Suricata is not executable.");
@@ -44,9 +43,7 @@ pub fn execute_suricata<'a>(suriconf: &Suriconf, logs: &mut CreatedLogs, options
         let mut args = vec![
             full_path,
             "-c",
-            &logs.suri_configuration.to_str()?,
-            "-S",
-            "/dev/null",
+            &logs.suri_configuration.to_str()?
         ];
 
         args.extend(vec_of_sur_cmd.iter().map(|s| s.as_str()));
@@ -58,7 +55,8 @@ pub fn execute_suricata<'a>(suriconf: &Suriconf, logs: &mut CreatedLogs, options
             panic!("Cannot create Ctrl+C handler.");
         };
 
-        let ctrl_c_events_thread = ctrl_c_events.clone();
+        let ctrl_c_events_thread1 = ctrl_c_events.clone();
+        let ctrl_c_events_thread2 = ctrl_c_events.clone();
 
         let mut child = Command::new("sudo")
         .arg("-n")
@@ -80,24 +78,54 @@ pub fn execute_suricata<'a>(suriconf: &Suriconf, logs: &mut CreatedLogs, options
 
         let timeout = Duration::from_secs(suriconf.preconf_time);
         let start = std::time::Instant::now();
-        let ticks_thread = tick(Duration::from_millis(100));
+        let ticks_thread1 = tick(Duration::from_millis(100));
+        let ticks_thread2 = tick(Duration::from_millis(100));
         let cpu_usage_ticks = tick(Duration::from_secs(FLOW_WINDOW));
+        let nic_usage_ticks = tick(Duration::from_secs(FLOW_WINDOW));
+
+
+        let interface = suriconf.interface.clone();
+        let ethtool = suriconf.ethtool_bin.clone();
 
         let cpu_usage_thread = thread::spawn(move || {
             loop {
                 select! {
                  recv(cpu_usage_ticks) -> _ => {
-                        let mut sys = sys_thread.lock().expect("Unable to lock SystemVar.");
+                        let mut sys = sys_thread1.lock().expect("Unable to lock SystemVar.");
                         get_cpu_usage(&mut sys);
                 }
 
-                recv(ticks_thread) -> _ => {
-                        if kill_thread.load(Ordering::SeqCst) {
+                recv(ticks_thread1) -> _ => {
+                        if kill_thread1.load(Ordering::SeqCst) {
                                break;
                          }
                     }
 
-                recv(ctrl_c_events_thread) -> _ => {
+                recv(ctrl_c_events_thread1) -> _ => {
+                   break;
+                }
+
+                }
+            }
+        });
+
+        let nic_thread = thread::spawn(move || {
+            let interface_str = interface.as_str();
+            let ethtool_str = ethtool.to_str().expect("Unable to get Ethtool path as str.");
+            loop {
+                select! {
+                 recv(nic_usage_ticks) -> _ => {
+                        let mut sys = sys_thread2.lock().expect("Unable to lock SystemVar.");
+                        get_ethtool_stats(&mut sys, interface_str,ethtool_str)
+                }
+
+                recv(ticks_thread2) -> _ => {
+                        if kill_thread2.load(Ordering::SeqCst) {
+                               break;
+                         }
+                    }
+
+                recv(ctrl_c_events_thread2) -> _ => {
                    break;
                 }
 
@@ -146,6 +174,7 @@ pub fn execute_suricata<'a>(suriconf: &Suriconf, logs: &mut CreatedLogs, options
             }
         }
     cpu_usage_thread.join().expect("Cpu_usage_thread panic.");
+    nic_thread.join().expect("Nic_thread panic.");
     }
 
     let sys = Arc::try_unwrap(sys)
@@ -175,6 +204,56 @@ pub fn get_cpu_usage(sys: &mut SystemVar) {
             else {
                 sys.threads.push(Thread {name: vec![], core_id, cpu_usage: vec![cpu.cpu_usage()]});
             }
+        }
+}
+
+pub fn get_ethtool_stats(sys: &mut SystemVar, interface: &str, ethtool: &str) {
+        let mut rx_dropped: u64 = 0;
+        let mut rx_dropped_nic: u64 = 0;
+
+        let output = Command::new("sudo")
+            .arg(&ethtool)
+            .arg("-S")
+            .arg(&interface)
+            .output()
+            .expect("Failed to execute ethtool");
+
+        if output.status.success() {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            rx_dropped = stdout.lines()
+                .find(|line| line.contains("rx_dropped"))
+                .and_then(|line| line.split_whitespace().nth(1))
+                .unwrap_or("0")
+                .parse::<u64>()
+                .unwrap_or(0);
+        } else {
+            rx_dropped = 0;
+        }
+
+        if let Some(rx_dropped_stat) = sys.ethtool_stat.iter_mut().find(|t| t.name == "rx_dropped") {
+            rx_dropped_stat.value.push(rx_dropped);
+        }
+        else {
+            sys.ethtool_stat.push(CpuThread {name: "rx_dropped".to_string(), value: vec![rx_dropped] })
+        }
+
+        if output.status.success() {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            rx_dropped_nic = stdout.lines()
+                .find(|line| line.contains("rx_dropped_nic"))
+                .and_then(|line| line.split_whitespace().nth(1))
+                .unwrap_or("0")
+                .parse::<u64>()
+                .unwrap_or(0);
+        } else {
+            rx_dropped_nic = 0;
+        }
+
+        if let Some(rx_dropped_nic_stat) = sys.ethtool_stat.iter_mut().find(|t| t.name == "rx_dropped_nic") {
+            rx_dropped_nic_stat.value.push(rx_dropped_nic);
+        }
+        else {
+            sys.ethtool_stat.push(CpuThread {name: "rx_dropped_nic".to_string(), value: vec![rx_dropped_nic] })
         }
 }
 
@@ -221,11 +300,15 @@ fn get_cores_with_threads(suri_pid: i32, sys: &mut SystemVar) {
 pub fn kill_suricata(child: &mut Child) {
     let end_timeout = Duration::from_secs(30);
     let pid = child.id();
-    Command::new("sudo")
+    let mut output = Command::new("sudo")
     .arg("pkill")
     .arg("Suricata-Main")
     .status()
     .expect("Unable to pkill Suricata-Main (SIGTERM).");
+
+    if !output.success() {
+        panic!("Process failed.");
+    }
 
     let end_start = std::time::Instant::now();
     loop {
@@ -236,12 +319,15 @@ pub fn kill_suricata(child: &mut Child) {
 
         if end_start.elapsed() >=  end_timeout {
             println!("Still alive, killing pid {}.", pid);
-            Command::new("sudo")
+            output = Command::new("sudo")
                 .arg("pkill")
                 .arg("-SIGKILL")
                 .arg("Suricata-Main")
                 .status()
                 .expect("Unable to pkill Suricata-Main (SIGKILL).");
+            if !output.success() {
+                panic!("Process failed.");
+            }
             break
         }
         thread::sleep(Duration::from_millis(100));
@@ -261,7 +347,7 @@ pub fn ctrl_channel() -> anyhow::Result<Receiver<()>> {
 }
 
 pub fn check_min_suricata_runtime_for_modules(suriconf: &Suriconf) {
-    if suriconf.modules.contains(&Modules::FlowThreads) && WINDOWS*120 > suriconf.preconf_time {
+    if suriconf.modules.contains(&Modules::FlowThreads) && WINDOWS*MIN_RUN > suriconf.preconf_time {
             panic!("Unable to execute Suricata and have enough samples from preconfiguration, \
             FlowThreads module needs at least 6 minutes.")
     }

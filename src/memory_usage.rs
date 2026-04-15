@@ -57,6 +57,7 @@ impl Module for MemoryModule {
             Keys::defrag_max_frags_reached,
             Keys::defrag_max_trackers_reached,
             Keys::defrag_tracker_hard_reuse,
+            Keys::wrk_cpu_set
 
         ];
 
@@ -241,7 +242,12 @@ impl MemoryModule {
 
         let tcp_reassembly_gap = answers.iter().find(|a| a.key == &Keys::tcp_reassembly_gap).expect("Unable to get reassembly gap maximum.").value.as_array().and_then(|arr| arr.iter().filter_map(|v| v.as_u64()).max()).expect("Unable to get reassembly gap maximum.");
         if tcp_reassembly_gap > 0 {
-            println!("TCP traffic has gaps, continue.")
+            println!("TCP traffic has gaps: {tcp_reassembly_gap}, continue.")
+        }
+
+        let tcp_pkt_on_wrong_thread = answers.iter().find(|a| a.key == &Keys::tcp_pkt_on_wrong_thread).expect("Unable to get packets on wrong thread maximum.").value.as_array().and_then(|arr| arr.iter().filter_map(|v| v.as_u64()).max()).expect("Unable to get packets on wrong thread maximum.");
+        if tcp_pkt_on_wrong_thread > 0 {
+            println!("Bad load balancing, TCP traffic is processed on incorrect threads: {tcp_pkt_on_wrong_thread}, continue.")
         }
     }
 
@@ -379,17 +385,17 @@ impl MemoryModule {
                         self.get_max_defrag_tracker_active_stat(answers)/2
                     },
                     HashType::Stream => {
-                        (self.get_max_tcp_active_sessions_stat(answers)/2)/(self.get_workers(answers) as u64)
+                        (self.get_max_tcp_active_sessions_stat(answers)/2)/(self.get_new_workers(answers) as u64)
                     },
                     HashType::Reassembly => {
-                        (self.get_max_tcp_active_segments_stat(answers)/2)/(self.get_workers(answers) as u64)
+                        (self.get_max_tcp_active_segments_stat(answers)/2)/(self.get_new_workers(answers) as u64)
 
                     }
                 }
             },
             SetTable::Default => {
                 if *hash_type == HashType::Stream || *hash_type  == HashType::Reassembly {
-                    (ACTIVE_LIMIT/2)/self.get_workers(answers) as u64
+                    (ACTIVE_LIMIT/2)/self.get_new_workers(answers) as u64
                 }else {
                     ACTIVE_LIMIT/2
                 }
@@ -423,10 +429,10 @@ impl MemoryModule {
     }
 
     fn set_defrag_prealloc_trackers(&mut self, answers: &Vec<Answer<'_>>) {
-        let prealloc = answers.iter().find(|a| a.key == &Keys::defrag_prealloc).expect("Unable to get defrag prealloc.").value.as_str().expect("Unable to get defrag prealloc.");
-        if prealloc == "yes" {
+        let prealloc = answers.iter().find(|a| a.key == &Keys::defrag_prealloc).expect("Unable to get defrag prealloc.").value.as_str().expect("Unable to get defrag prealloc as str.");
+        if prealloc != "yes" {
             *self.questions.get_mut(&Keys::defrag_prealloc).expect("Unable to get defrag_prealloc from intern table.") =
-                Value::String(prealloc.to_string());
+                Value::String("yes".to_string());
         }
     }
 
@@ -454,7 +460,7 @@ impl MemoryModule {
 
         let prealloc = self.get_ippair_host_defrag_stream_reassembly_prealloc(answers, &HashType::Stream) as f64;
 
-        (max_tcp_active_sessions+(prealloc*self.get_workers(answers)))*(TCP_SESSION+TCP_STATE_QUEUE+STREAM_TCP_SACK_RECORD)
+        (max_tcp_active_sessions+(prealloc*self.get_new_workers(answers)))*(TCP_SESSION+TCP_STATE_QUEUE+STREAM_TCP_SACK_RECORD)
     }
 
     fn get_reassembly_memcap(&mut self, answers: &Vec<Answer<'_>>) -> f64 {
@@ -472,7 +478,7 @@ impl MemoryModule {
 
         let max_segment_overhead = self.get_segment_max_overhead(answers) as f64;
         let prealloc = self.get_ippair_host_defrag_stream_reassembly_prealloc(answers, &HashType::Reassembly) as f64;
-        let workers = self.get_workers(answers);
+        let workers = self.get_new_workers(answers);
 
         if self.debug {
             println!("max_packet_overhead: {max_segment_overhead}, max_tcp_active_segments: {max_tcp_active_segments}");

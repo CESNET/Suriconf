@@ -8,7 +8,8 @@ macro_rules! mods {
 }
 
 mods!(argument, structures, yaml, suricata, json,
-    memory_usage, query, flow, flow_threads, regression, module);
+    memory_usage, query, flow, flow_threads, regression,
+    module, cpu_affinity);
 
 static FLOW_WINDOW: u64 = 5; // in seconds
 static MIN_RUN: u64 = 120;
@@ -40,13 +41,16 @@ static  MANAGER_START: u8 = 1;
 static SYNC_AVG: u64 = 100;
 static MULTIPLIER: f64 = 1.2;
 
+static CPU_MULTIPLIER: f64 = 1.5;
 static FLOW_LOCAL_THREAD_MAX: f64 = 200.0;
 
 static ROB_REGRESSION: RobRegression = RobRegression::Huber;
-static MAX_PENDING_PACKETS: MaxPendingPackets = MaxPendingPackets::ten_thousand;
+static MAX_PENDING_PACKETS: MaxPendingPackets = MaxPendingPackets::forthy_five_thousand;
 static DEFAULT_PACKET_SIZE: DefaultPacketSize = DefaultPacketSize::Average;
 
 static CPU_USAGE_MAX: f32 = 95.0;
-static HUBER_THRESHOLD: f64 = 0.0;
 
+static  CPU_USAGE: f64 = 50.0;
+static HUBER_THRESHOLD: f64 = 0.0;
 static MANAGER_SLOPE: f64 = 0.1;  // once every 10 s
+static PANIC_THRESHOLD: u64 = 100;

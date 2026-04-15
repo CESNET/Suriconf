@@ -44,6 +44,18 @@ pub enum Commands {
         #[clap(short='b', long)]
         path_to_bin: Option<PathBuf>,
 
+        /// Ethtool path to bin
+        #[clap(short='e', long)]
+        ethtool_bin: Option<PathBuf>,
+
+        /// Ifconfig path to bin
+        #[clap(short='i', long)]
+        ifconfig_bin: Option<PathBuf>,
+
+        /// IP path to bin
+        #[clap(short='p', long)]
+        ip_bin: Option<PathBuf>,
+
         /// Change path to logs
         #[clap(short='l', long)]
         path_to_logs: Option<PathBuf>,
@@ -52,6 +64,7 @@ pub enum Commands {
         #[clap(short='t', long="time")]
         preconf_time: Option<u64>,
 
+        /// Specify Suriconf analysis
         #[clap(short='a', long)]
         analysis: Option<Analysis>
     },

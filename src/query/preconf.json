@@ -54,6 +54,9 @@
     "threads_stat": {
       "path_to_value": "/threads_stat"
     },
+    "ethtool_stat" : {
+      "path_to_value" : "/ethtool_stat"
+    },
     "uptime": {
       "path_to_value": "/uptime"
     },
@@ -98,6 +101,21 @@
     },
     "defrag_tracker_hard_reuse" : {
       "path_to_value": "/defrag/defrag_tracker_hard_reuse"
+    },
+    "capture_kernel_drops" : {
+      "path_to_value": "/cpu/capture_kernel_drops"
+    },
+    "capture_errors" : {
+      "path_to_value": "/cpu/capture_errors"
+    },
+    "capture_kernel_packets" : {
+      "path_to_value": "/cpu/capture_kernel_packets"
+    },
+    "decoder_pkts" : {
+      "path_to_value": "/cpu/decoder_pkts"
+    },
+    "decoder_invalid" : {
+      "path_to_value": "/cpu/decoder_invalid"
     }
   }
 }

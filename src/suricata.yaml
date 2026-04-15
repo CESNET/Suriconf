@@ -684,7 +684,7 @@ af-packet:
     # Use tpacket_v3 capture mode.
     # Defaults to true for non-copy modes, and false for tap and ips mode.
     # Don't use it in IPS or TAP mode as it causes severe latency.
-    #tpacket-v3: yes
+    tpacket-v3: yes
     # Ring size will be computed with respect to "max-pending-packets" and number
     # of threads. You can set manually the ring size in number of packets by setting
     # the following value. If you are using flow "cluster-type" and have really network
@@ -1371,7 +1371,7 @@ max-pending-packets: 1024
 # Runmode the engine should use. Please check --list-runmodes to get the available
 # runmodes for each packet acquisition method. Default depends on selected capture
 # method. 'workers' generally gives best performance.
-#runmode: autofp
+runmode: workers
 
 # Specifies the kind of flow load balancer used by the flow pinned autofp mode.
 #

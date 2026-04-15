@@ -94,6 +94,11 @@ pub trait Module {
         workers
     }
 
+    fn get_new_workers(&self, answers: &Vec<Answer<'_>>) -> f64 {
+        answers.iter().find(|a| a.key == &Keys::wrk_cpu_set).and_then(|d| d.value.as_array())
+        .expect("wrk_cpu_set is not an array").len() as f64
+    }
+
     fn free_memcap(&mut self, answers: &Vec<Answer<'_>>, changes: &Vec<MemcapChange>, debug: bool) -> bool {
         let mut total_used: u64 = 0;
 
@@ -136,7 +141,6 @@ pub trait Module {
             .expect("Unable to get max_memory_usage as str.");
         let max_memory_usage= Byte::parse_str(max_memory_usage_str, true).ok().map(|b| b.as_u64()).expect("Unable to convert max_memory_usage_str to Bytes.");
 
-
         let max_pending_packets = if let Some(c) = changes.iter().find(|c| c.keys == Keys::max_pending_packets) {
             c.value
         } else {
@@ -149,7 +153,7 @@ pub trait Module {
             self.get_default_packet_size(answers)
         };
 
-        let workers = self.get_workers(answers) as u64;
+        let workers = self.get_new_workers(answers) as u64;
 
         total_used+= workers*(PACKET as u64 + default_packet_size)*max_pending_packets;
 
