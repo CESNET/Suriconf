@@ -1,7 +1,7 @@
 %YAML 1.1
 ---
 
-suriconf-version: 1.0
+suriconf-version: 1.0-dev
 
 suri-configuration: suricata.yaml
 suricata-bin: /usr/bin/suricata
@@ -25,13 +25,13 @@ modules:
     enabled: true
 
   - name: memory_usage
-    enabled: false
+    enabled: true
 
   - name: flow
-    enabled: false
+    enabled: true
 
   - name: flow_threads
-    enabled: false
+    enabled: true
 
 variables:
   interface: wlan0
