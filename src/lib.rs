@@ -1,3 +1,9 @@
+/*
+Author(s): Eliška Červinková <eliska.cervinkova@cesnet.cz>
+
+This file defines constats for Suriconf.
+*/
+
 use crate::memory_usage::{DefaultPacketSize, MaxPendingPackets};
 use crate::structures::RobRegression;
 

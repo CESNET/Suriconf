@@ -1,3 +1,9 @@
+/*
+Author(s): Eliška Červinková <eliska.cervinkova@cesnet.cz>
+
+This file represents a Flow module.
+*/
+
 use byte_unit::{Byte, UnitType};
 use crate::structures::{Keys, ModuleResult, Analysis, Answer, Change, MemcapChange, Flow};
 use crate::module::Module;

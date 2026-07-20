@@ -1,3 +1,9 @@
+/*
+Author(s): Eliška Červinková <eliska.cervinkova@cesnet.cz>
+
+This file contains Huber and Theil-Sen regression.
+*/
+
 use scirs2_core::ndarray::{Array1, Array2};
 use scirs2_stats::{huber_regression, theilslopes};
 

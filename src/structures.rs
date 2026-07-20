@@ -1,3 +1,9 @@
+/*
+Author(s): Eliška Červinková <eliska.cervinkova@cesnet.cz>
+
+This file contains Suriconf structures.
+*/
+
 use std::path::PathBuf;
 extern crate chrono;
 use chrono::offset::Utc;

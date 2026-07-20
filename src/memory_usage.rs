@@ -1,3 +1,9 @@
+/*
+Author(s): Eliška Červinková <eliska.cervinkova@cesnet.cz>
+
+This file represents a Memory usage module.
+*/
+
 use byte_unit::{Byte, UnitType};
 use serde_json::Value;
 use std::collections::{BTreeMap, HashMap};

@@ -1,3 +1,9 @@
+/*
+Author(s): Eliška Červinková <eliska.cervinkova@cesnet.cz>
+
+This file is a startpoint for Suriconf.
+*/
+
 use clap::{Parser};
 use suriconf::argument::Args;
 use suriconf::yaml;

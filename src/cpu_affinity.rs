@@ -1,3 +1,9 @@
+/*
+Author(s): Eliška Červinková <eliska.cervinkova@cesnet.cz>
+
+This file represents a CPU affinity module.
+*/
+
 use std::collections::{HashMap};
 use serde_json::{Value, Number};
 use std::fs;

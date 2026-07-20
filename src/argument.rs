@@ -1,3 +1,9 @@
+/*
+Author(s): Eliška Červinková <eliska.cervinkova@cesnet.cz>
+
+This file provides a parameter interface.
+*/
+
 use clap::{Parser, Subcommand};
 use std::path::{PathBuf};
 use crate::structures::{Analysis, Mode, CaptureMode, Modules};

@@ -1,3 +1,9 @@
+/*
+Author(s): Eliška Červinková <eliska.cervinkova@cesnet.cz>
+
+This file represents a Flow threads module.
+*/
+
 use crate::structures::{Keys, ModuleResult, RobRegression, Analysis, Thread, Answer, Change, Reason};
 use crate::module::Module;
 use std::collections::{HashMap};

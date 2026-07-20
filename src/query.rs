@@ -1,3 +1,10 @@
+/*
+Author(s): Eliška Červinková <eliska.cervinkova@cesnet.cz>
+
+This file represents a Query and Execute stage.
+It invokes modules and stores their configurations.
+*/
+
 use chrono::{DateTime, Utc};
 use std::collections::HashMap;
 use std::path::{PathBuf};

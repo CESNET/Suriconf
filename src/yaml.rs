@@ -1,3 +1,9 @@
+/*
+Author(s): Eliška Červinková <eliska.cervinkova@cesnet.cz>
+
+This file represents a yaml parser.
+*/
+
 use std::fs::{File};
 use std::io::{Write, BufWriter, BufReader, BufRead};
 use std::path::{PathBuf};

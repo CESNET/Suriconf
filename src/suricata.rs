@@ -1,3 +1,9 @@
+/*
+Author(s): Eliška Červinková <eliska.cervinkova@cesnet.cz>
+
+This file executes Suricata.
+*/
+
 use std::path::PathBuf;
 use std::process::{Child, Command};
 use crate::yaml::{emergency_check_memcap, Suriconf};

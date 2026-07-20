@@ -1,3 +1,9 @@
+/*
+Author(s): Eliška Červinková <eliska.cervinkova@cesnet.cz>
+
+This file represents a json parser.
+*/
+
 use std::fs::File;
 use std::io::{BufReader, BufWriter};
 use std::path::PathBuf;

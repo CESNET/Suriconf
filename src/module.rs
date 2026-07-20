@@ -1,3 +1,9 @@
+/*
+Author(s): Eliška Červinková <eliska.cervinkova@cesnet.cz>
+
+This file represents universal trait for modules.
+*/
+
 use byte_unit::Byte;
 use serde_json::Value;
 use std::collections::{BTreeMap, HashMap};
