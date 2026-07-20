@@ -1,3 +1,8 @@
+/*
+Author(s): Eliška Červinková <eliska.cervinkova@cesnet.cz>
+
+This file contains implementation tests.
+*/
 use::suriconf::json;
 use std::path::PathBuf;
 

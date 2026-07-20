@@ -1,3 +1,9 @@
+/*
+Author(s): Eliška Červinková <eliska.cervinkova@cesnet.cz>
+
+This file contains Suriconf structures.
+*/
+
 use std::path::PathBuf;
 extern crate chrono;
 use chrono::offset::Utc;
@@ -166,6 +172,7 @@ pub enum Keys { // JUST FOR FLOW
     max_cpu_usage_vec,
     threads_stat,
     uptime,
+    datetime,
     memcap_pressure,
     memcap_pressure_max,
     defrag_memcap,
@@ -270,6 +277,7 @@ impl Keys {
             "max_cpu_usage_vec" => Keys::max_cpu_usage_vec, 
             "threads_stat" => Keys::threads_stat,
             "uptime" => Keys::uptime,
+            "datetime" => Keys::datetime,
             "memcap_pressure" => Keys::memcap_pressure,
             "memcap_pressure_max" => Keys::memcap_pressure_max,
             "defrag_memcap" => Keys::defrag_memcap,
@@ -377,10 +385,7 @@ pub enum FileNames {
     preconf
 }
 impl CreatedLogs {
-    pub fn new(log_dir: &PathBuf) -> Self {
-        let system_time = SystemTime::now();
-        let datetime: DateTime<Utc> = system_time.into();
-
+    pub fn new(log_dir: &PathBuf, datetime: &DateTime<Utc>) -> Self {
         let mut suri_configuration = PathBuf::from("./tmp");
         if !suri_configuration.exists() {
             fs::create_dir_all(&suri_configuration).expect("Unable to create tmp directory.");
@@ -395,7 +400,7 @@ impl CreatedLogs {
         let mut preconfiguration = PathBuf::from("./tmp");
 
         suri_configuration.push(format!("suricata{}.yaml", datetime.format("-%Y-%m-%d-%H:%M:%S")));
-        preconfiguration.push(format!("preconfiguration{}.json", datetime.format("-%Y-%m-%d-%H:%M:%S")));
+        preconfiguration.push(format!("preconfiguration{}.json",datetime.format("-%Y-%m-%d-%H:%M:%S")));
         Self {
             suri_configuration,
             stats,

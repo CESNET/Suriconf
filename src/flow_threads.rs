@@ -1,3 +1,9 @@
+/*
+Author(s): Eliška Červinková <eliska.cervinkova@cesnet.cz>
+
+This file represents a Flow threads module.
+*/
+
 use crate::structures::{Keys, ModuleResult, RobRegression, Analysis, Thread, Answer, Change, Reason};
 use crate::module::Module;
 use std::collections::{HashMap};
@@ -67,7 +73,7 @@ impl  FlowThreadsModule {
         let in_queue = self.get_flows_in_queue(answers);
         let recycled = self.get_recycled_stat(answers);
         let uptime = self.get_uptime_stat(answers);
-        let num_elements = MIN_RUN / FLOW_WINDOW ;
+        let num_elements = (MIN_RUN/5) / WINDOWS;
 
         let in_queue_result: Vec<f64> =
             if ROB_REGRESSION == RobRegression::Huber {
@@ -137,9 +143,11 @@ impl  FlowThreadsModule {
                 slope_vector.push(recycler_up);
             }
 
-            if current_in_queue_result.last() == in_queue_result.last() {
+            let last_three = in_queue_result.iter().rev().take(3).collect::<Vec<_>>();
+            if last_three.contains(&current_in_queue_result.last().expect("Unable to get last element from current_in_queue_result vector."))  {
                 break;
             }
+
             counter +=1;
             current_in_queue_result.clear();
             avg_cpu_usage.clear();
@@ -159,7 +167,7 @@ impl  FlowThreadsModule {
     }
 
     fn get_manager_count(&self, answers: &Vec<Answer<'_>>) -> (ModuleResult, Option<u64>) {
-        let num_elements = MIN_RUN / FLOW_WINDOW ;
+        let num_elements = (MIN_RUN / 5) / WINDOWS ;
         let flow_mgr_full_result  = self.get_flow_mgr_full_result(answers, self.debug);
         let mgr_cpu_usages: Vec<Thread> = self.get_specific_cpu_usage(answers, "FM");
 
@@ -221,6 +229,7 @@ impl  FlowThreadsModule {
             if last_three.contains(&current_flow_mgr_full_result.last().expect("Unable to get last element from current_flow_mgr_full_result vector."))  {
                 break;
             }
+
             counter +=1;
             current_flow_mgr_full_result.clear();
             avg_cpu_usage.clear();

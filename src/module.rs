@@ -1,7 +1,13 @@
+/*
+Author(s): Eliška Červinková <eliska.cervinkova@cesnet.cz>
+
+This file represents universal trait for modules.
+*/
+
 use byte_unit::Byte;
 use serde_json::Value;
 use std::collections::{BTreeMap, HashMap};
-use crate::{FLOW_WINDOW, MIN_RUN, PACKET, ROB_REGRESSION};
+use crate::{FLOW_WINDOW, MIN_RUN, PACKET, ROB_REGRESSION, WINDOWS};
 use crate::regression::{my_huber_regression, my_theil_sen_regression};
 use crate::structures::{Analysis, Answer, Change, Keys, RobRegression, Thread, MemcapChange, Reason, Flow};
 
@@ -46,15 +52,19 @@ pub trait Module {
     }
 
     fn get_flow_mgr_full_result(&self, answers: &Vec<Answer<'_>>, debug: bool) -> Vec<f64> {
-        let flow_mgr_full_hash_pass = answers.iter().find(|h| h.key == &Keys::flow_mgr_full_hash_pass).expect("Unable to get flow_mgr_full_hash_pass.").value
+        let mut flow_mgr_full_hash_pass = answers.iter().find(|h| h.key == &Keys::flow_mgr_full_hash_pass).expect("Unable to get flow_mgr_full_hash_pass.").value
             .as_array().expect("Unable to create array from flow_mgr_full_hash_pass record.").iter().map(|v| v.as_f64().expect("Unable to transform flow_mgr_full_hash_pass u64.")).collect::<Vec<f64>>();
+
+        for value in &mut flow_mgr_full_hash_pass {
+            *value /= self.get_managers_stat(answers);
+        }
 
         if debug {
             println!("flow_mgr_full_hash_pass:{:?}.", flow_mgr_full_hash_pass)
         }
 
         let uptime = self.get_uptime_stat(answers);
-        let num_elements = MIN_RUN / FLOW_WINDOW ;
+        let num_elements = (MIN_RUN /5) / WINDOWS;
 
         if ROB_REGRESSION == RobRegression::Huber {
             my_huber_regression(flow_mgr_full_hash_pass, uptime, FLOW_WINDOW, num_elements)

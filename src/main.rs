@@ -1,9 +1,17 @@
+/*
+Author(s): Eliška Červinková <eliska.cervinkova@cesnet.cz>
+
+This file is a startpoint for Suriconf.
+*/
+
+use chrono::{DateTime, Utc};
 use clap::{Parser};
+use std::time::SystemTime;
 use suriconf::argument::Args;
 use suriconf::yaml;
 use suriconf::yaml::{Suriconf};
 use suriconf::json::Preconfiguration;
-use suriconf::structures::{CreatedLogs, JsonVar, Modules, SuricataAgain};
+use suriconf::structures::{CreatedLogs, JsonVar, SuricataAgain};
 use suriconf::suricata;
 use suriconf::query::Resources;
 
@@ -35,9 +43,11 @@ fn main() {
         },
         Ok(()) => {}
     }
-
     let mut json_var: JsonVar = Default::default();
-    match yaml::check_set_cpu_affinity(&mut suricata_string, &suriconf, &mut json_var) {
+
+    let system_time = SystemTime::now();
+    let datetime: DateTime<Utc> = system_time.into();
+    match yaml::check_set_cpu_affinity(&mut suricata_string, &suriconf, &mut json_var, &datetime) {
         Err(e) => {
             panic!("{e}")
         },
@@ -79,7 +89,7 @@ fn main() {
         Ok(()) => {}
     }
 
-    let mut logs = CreatedLogs::new(&suriconf.log_dir);
+    let mut logs = CreatedLogs::new(&suriconf.log_dir, &datetime);
     yaml::close_yaml(&suricata_string, &logs.suri_configuration).unwrap();
 
     suricata::check_min_suricata_runtime_for_modules(&suriconf);
@@ -102,7 +112,7 @@ fn main() {
     };
 
     // PRECONFIGURATION
-    let mut preconfiguration = Preconfiguration::new(sys);
+    let mut preconfiguration = Preconfiguration::new(sys, datetime);
     match preconfiguration.create_preconfiguration_structure_and_save(&logs) {
         Err(e) => {
             panic!("{}", e);

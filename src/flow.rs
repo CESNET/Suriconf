@@ -1,3 +1,9 @@
+/*
+Author(s): Eliška Červinková <eliska.cervinkova@cesnet.cz>
+
+This file represents a Flow module.
+*/
+
 use byte_unit::{Byte, UnitType};
 use crate::structures::{Keys, ModuleResult, Analysis, Answer, Change, MemcapChange, Flow};
 use crate::module::Module;
@@ -9,7 +15,7 @@ use crate::{FLOW_WINDOW, MAX_AVG_RATIO, LOAD_FACTOR, MIN_AVG_RATIO, FLOW_OBJECT,
 #[derive(Debug)]
 pub struct FlowModule {
     pub questions: HashMap<Keys, Value>, // changed
-    pub flow_map: BTreeMap<u64, Flow>,
+    pub flow_map: BTreeMap<u64, Flow>, // time, flow
     pub debug: bool
 }
 
@@ -19,12 +25,6 @@ pub struct Counter {
     pub flow_active: i64,
     pub current_max: i64,
     pub counter: u32
-}
-
-#[derive(Debug)]
-pub struct SweepLineAlgo {
-    pub time: u64,
-    pub flows: i64
 }
 
 impl Module for FlowModule {
@@ -143,25 +143,28 @@ impl Module for FlowModule {
 
 impl FlowModule {
     fn get_prealloc(&self, answers: &Vec<Answer<'_>>)-> ModuleResult {
-        let sync_avg = answers.iter().find(|a| a.key == &Keys::flow_wrk_spare_sync_avg).expect("Unable to get flow worker spare sync average.");
+        // let sync_avg = answers.iter().find(|a| a.key == &Keys::flow_wrk_spare_sync_avg).expect("Unable to get flow worker spare sync average.");
         let sync_incomplete = answers.iter().find(|a| a.key == &Keys::flow_wrk_spare_sync_incomplete).expect("Unable to get flow worker spare incompletes.");
         let sync_empty = answers.iter().find(|a| a.key == &Keys::flow_wrk_spare_sync_empty).expect("Unable to get flow worker spare empty.");
 
         if sync_incomplete.value.as_array().expect("Unable to create vector from sync_incomplete").last().and_then(|a| a.as_u64()).expect("Unable to get last value as u64.") > 0 {
-            return ModuleResult::Up
+            println!("WARNING: sync_incomplete is more than zero.");
+            //return ModuleResult::Up
         }
 
         if sync_empty.value.as_array().expect("Unable to create vector from sync_empty.").last().and_then(|a| a.as_u64()).expect("Unable to get last value as u64.") > 0 {
-            return ModuleResult::Up
+            println!("WARNING: sync_empty is more than zero.");
+            //return ModuleResult::Up
         }
-        if sync_avg.value.as_array().map(|arr| arr.iter().filter_map(|v| v.as_u64()).sum::<u64>()).expect("Unable to get values for sync_avg.") < SYNC_AVG {
-            return ModuleResult::Up
-        }
+        // // if sync_avg.value.as_array().map(|arr| arr.iter().filter_map(|v| v.as_u64()).sum::<u64>()).expect("Unable to get values for sync_avg.") < SYNC_AVG {
+        // //     return ModuleResult::Up
+        // // }
 
-        if self.get_prealloc_stat(answers) > self.get_suri_max_flow_active_stat(answers)/2  {
-            return ModuleResult::Down
-        }
-        ModuleResult::Ok
+        // if self.get_prealloc_stat(answers) > self.get_suri_max_flow_active_stat(answers)/2  {
+        //     return ModuleResult::Down
+        // }
+        // ModuleResult::Ok
+        ModuleResult::Up
     }
 
     fn get_max_flow_active(&self) -> u64 {
@@ -222,13 +225,13 @@ impl FlowModule {
                     println!("flow_hash_size: {flow_hash_size}, current_row_average: {current_average}, current_row_max: {}", counter.current_max);
                 }
 
-                if counter.current_max != 0 {
-                    if (current_average/counter.current_max) >= MAX_AVG_RATIO {
+                if current_average != 0 {
+                    if (counter.current_max/current_average) >= MAX_AVG_RATIO {
                         return ModuleResult::Up
                     }
                 }
 
-                if self.get_load_factor(counter.flow_active, flow_hash_size) >= LOAD_FACTOR {
+                if self.get_load_factor(counter.current_max, flow_hash_size) >= LOAD_FACTOR {
                     return ModuleResult::Up
                 }
 

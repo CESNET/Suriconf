@@ -1,3 +1,9 @@
+/*
+Author(s): Eliška Červinková <eliska.cervinkova@cesnet.cz>
+
+This file represents a Memory usage module.
+*/
+
 use byte_unit::{Byte, UnitType};
 use serde_json::Value;
 use std::collections::{BTreeMap, HashMap};
@@ -208,15 +214,15 @@ impl MemoryModule {
         let ippair_memcap_str = answers.iter().find(|a| a.key == &Keys::ippair_memcap).expect("Unable to get ippair memcap.").value.as_str().expect("Unable to get ippair memcap as str.");
         let ippair_memcap = Byte::parse_str(ippair_memcap_str, true).ok().map(|b| b.as_u64()).expect("Unable to convert ippair_memcap to Bytes.");
         let ippair_memuse = answers.iter().find(|a| a.key == &Keys::ippair_memuse).expect("Unable to get ippair memuse maximum.").value.as_array().and_then(|arr| arr.iter().filter_map(|v| v.as_u64()).max()).expect("Unable to get ippair memuse maximum.");
-        if ippair_memuse == ippair_memcap {
-            println!("IPpair memuse is 100%, continue.")
+        if ippair_memuse as f64 >= (ippair_memcap as f64)* 0.95 {
+            println!("IPpair memuse is 95%, continue.")
         }
 
         let host_memcap_str = answers.iter().find(|a| a.key == &Keys::ippair_memcap).expect("Unable to get host memcap.").value.as_str().expect("Unable to get hosy memcap as str.");
         let host_memcap = Byte::parse_str(host_memcap_str, true).ok().map(|b| b.as_u64()).expect("Unable to convert host_memcap to Bytes.");
         let host_memuse = answers.iter().find(|a| a.key == &Keys::host_memuse).expect("Unable to get host memuse maximum.").value.as_array().and_then(|arr| arr.iter().filter_map(|v| v.as_u64()).max()).expect("Unable to get host memuse maximum.");
-        if host_memuse == host_memcap {
-            println!("Host memuse is 100%, continue.")
+        if host_memuse as f64 >= (host_memcap as f64)*0.95 {
+            println!("Host memuse is 95%, continue.")
         }
 
         let defrag_max_frags_reached = answers.iter().find(|a| a.key == &Keys::defrag_max_frags_reached).expect("Unable to get max frags reached maximum.").value.as_array().and_then(|arr| arr.iter().filter_map(|v| v.as_u64()).max()).expect("Unable to get max frags reached maximum.");
@@ -460,7 +466,7 @@ impl MemoryModule {
 
         let prealloc = self.get_ippair_host_defrag_stream_reassembly_prealloc(answers, &HashType::Stream) as f64;
 
-        (max_tcp_active_sessions+(prealloc*self.get_new_workers(answers)))*(TCP_SESSION+TCP_STATE_QUEUE+STREAM_TCP_SACK_RECORD)
+        (max_tcp_active_sessions+(prealloc*self.get_new_workers(answers))*MULTIPLIER)*(TCP_SESSION+TCP_STATE_QUEUE+STREAM_TCP_SACK_RECORD)
     }
 
     fn get_reassembly_memcap(&mut self, answers: &Vec<Answer<'_>>) -> f64 {

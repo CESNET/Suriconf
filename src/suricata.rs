@@ -1,3 +1,9 @@
+/*
+Author(s): Eliška Červinková <eliska.cervinkova@cesnet.cz>
+
+This file executes Suricata.
+*/
+
 use std::path::PathBuf;
 use std::process::{Child, Command};
 use crate::yaml::{emergency_check_memcap, Suriconf};
@@ -347,7 +353,7 @@ pub fn ctrl_channel() -> anyhow::Result<Receiver<()>> {
 }
 
 pub fn check_min_suricata_runtime_for_modules(suriconf: &Suriconf) {
-    if suriconf.modules.contains(&Modules::FlowThreads) && WINDOWS*MIN_RUN > suriconf.preconf_time {
+    if suriconf.modules.contains(&Modules::FlowThreads) && MIN_RUN > suriconf.preconf_time {
             panic!("Unable to execute Suricata and have enough samples from preconfiguration, \
             FlowThreads module needs at least 6 minutes.")
     }

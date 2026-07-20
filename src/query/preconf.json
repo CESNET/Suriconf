@@ -60,6 +60,9 @@
     "uptime": {
       "path_to_value": "/uptime"
     },
+    "datetime" :{
+      "path_to_value": "/datetime"
+    }, 
     "avg_pkt_size": {
       "path_to_value": "/decoder/avg_pkt_size"
     },

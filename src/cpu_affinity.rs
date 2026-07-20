@@ -1,3 +1,10 @@
+/*
+Author(s): Eliška Červinková <eliska.cervinkova@cesnet.cz>
+
+This file represents a CPU affinity module.
+*/
+
+use chrono::{DateTime, Utc};
 use std::collections::{HashMap};
 use serde_json::{Value, Number};
 use std::fs;
@@ -36,7 +43,8 @@ impl Module for CpuAffinityModule {
             Keys::flow_managers,
             Keys::flow_recyclers,
             Keys::ifconfig,
-            Keys::af_packet_interface_threads
+            Keys::af_packet_interface_threads,
+            Keys::datetime
         ];
 
         let questions: HashMap<Keys, Value> =
@@ -67,13 +75,15 @@ impl Module for CpuAffinityModule {
         .map(|a| Value::Number(Number::from(*a))).collect());
         *self.questions.get_mut(&Keys::wrk_cpu_set).expect("Unable to get wrk_cpu_set from intern table.") = new_wrk_cpu_set;
 
-        let mut nic_file = yaml::create_nic_bash_file();
+        let datetime  = self.get_datetime_stat(answers);
+        let mut nic_file = yaml::create_nic_bash_file(&datetime);
         
         yaml::disable_irqbalance(&mut nic_file);
-        self.module_disable_gro_lro(answers, &mut nic_file);
+        self.module_disable_offloading(answers, &mut nic_file);
         self.module_set_rss(answers, &mut nic_file);
         self.module_af_packet_tuning(answers, &mut nic_file);
         self.set_af_packet_threads(answers);
+        self.module_set_hard_irq(answers, &mut nic_file);
 
         Change::collect_changes(&self.questions)
     }
@@ -338,6 +348,12 @@ impl CpuAffinityModule {
         answers.iter().find(|h| h.key == &Keys::ethtool).and_then(|h| h.value.as_str()).expect("Ethtool cannot be found.")
     }
 
+    fn get_datetime_stat(&self, answers: &Vec<Answer<'_>>) -> DateTime<Utc> {
+        answers.iter().find(|h| h.key == &Keys::datetime)
+            .and_then(|h| h.value.as_str()).and_then(|v| DateTime::parse_from_rfc3339(v).ok())
+            .map(|dt| dt.with_timezone(&Utc)).expect("Unable to get datetime.")
+    }
+
     fn get_capture_kernel_drops_stat(&self, answers: &Vec<Answer<'_>>) -> Vec<CpuThread> {
         answers.iter().find(|h| h.key == &Keys::capture_kernel_drops).expect("Capture kernel drops cannot be found.")
             .value.as_array().expect("Unable to get capture_kernel_drops as array.").iter().map(|v|
@@ -432,7 +448,7 @@ impl CpuAffinityModule {
             .map(|a| a.as_u64().expect("Expected u64 value")).collect()
     }
 
-    pub fn set_new_cpu_set(&self, answers: &Vec<Answer<'_>>, new_workers: u64) -> Vec<u64>  {
+    pub fn set_new_cpu_set(&self, answers: &Vec<Answer<'_>>, mut new_workers: u64) -> Vec<u64>  {
         let max_cpu_usage_vec: Vec<u64> = answers.iter().find(|h| h.key == &Keys::max_cpu_usage_vec)
             .expect("Max cpu usage vector cannot be found.").value.as_array().expect("Unable to get array from max cpu usage vector.")
             .iter().map(|a| a.as_u64().expect("Expected u64 value")).collect();
@@ -444,6 +460,11 @@ impl CpuAffinityModule {
         if new_workers > max_cpu_usage_vec.len() as u64 {
             panic!("Unable to configure Suricata, not enough cpu cores for workers.")
         }
+
+        if new_workers < 3 {
+            new_workers = 4; // default is 4
+        }
+
         let mut new_wrk_cpu_set = Vec::new();
         let numa_node = self.get_interface_numa_node(answers);
         if numa_node == -1 {
@@ -527,9 +548,9 @@ impl CpuAffinityModule {
         yaml::set_hard_irq(interface, &wrk_cpu_set, nic_file);
     }
 
-    fn module_disable_gro_lro(&self, answers: &Vec<Answer<'_>>, nic_file: &mut File) {
+    fn module_disable_offloading(&self, answers: &Vec<Answer<'_>>, nic_file: &mut File) {
         let interface = self.get_interface_stat(answers);
         let ethtool =  self.get_ethtool_stat(answers);
-        yaml::disable_gro_lro(interface, ethtool, nic_file);
+        yaml::disable_offloading(interface, ethtool, nic_file);
     }
 }
