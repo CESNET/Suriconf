@@ -13,9 +13,8 @@ use strum::IntoEnumIterator;
 use crate::yaml::{Suriconf};
 use serde_json::{Value, Number};
 use std::fs;
-use std::time::SystemTime;
 use crate::{yaml};
-use crate::json::{find_in_json_with_path_mut, find_in_json_with_path_ref, json_to_value, open_json, save_to_json};
+use crate::json::{find_in_json_with_path_mut, find_in_json_with_path_ref, json_to_value, open_json};
 
 #[derive(Debug)]
 pub struct Resources {
@@ -169,14 +168,21 @@ impl Resources {
             self.query_module(&module, &mut jsons);
         }
 
-        let system_time = SystemTime::now();
-        let datetime: DateTime<Utc> = system_time.into();
         self.write_changes(&mut jsons);
 
         let mut suricata_result_path = PathBuf::from("./tmp");
         if !suricata_result_path.exists() {
             fs::create_dir_all(&suricata_result_path).expect("Unable to create tmp directory.");
         }
+
+        let mut question: Vec<Keys> = Vec::new();
+        question.push(Keys::datetime);
+        self.check_table_if_null(&question, &mut jsons);
+        let answer = self.get_from_table(&question);
+        let datetime = answer.iter().find(|h| h.key == &Keys::datetime)
+            .and_then(|h| h.value.as_str()).and_then(|v| DateTime::parse_from_rfc3339(v).ok())
+            .map(|dt| dt.with_timezone(&Utc)).expect("Unable to get datetime.");
+
         suricata_result_path.push(format!("suricata_result{}.yaml", datetime.format("-%Y-%m-%d-%H:%M:%S")));
 
         let mut suricata_result = yaml::json_to_yaml(jsons.suricata);

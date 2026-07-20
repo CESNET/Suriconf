@@ -12,6 +12,7 @@ use std::fs::OpenOptions;
 use crate::argument::{Commands, Args};
 use crate::structures::{Analysis, CaptureMode, CreatedLogs, JsonVar, Mode, Keys, Modules};
 use byte_unit::{Byte, UnitType};
+use chrono::{DateTime, Utc};
 use is_executable::IsExecutable;
 use std::fs;
 use std::process::{Command, Output};
@@ -139,7 +140,7 @@ impl Default for Interface {
     }
 }
 
-pub fn check_set_cpu_affinity(suricata_string: &mut Value, suriconf: &Suriconf, json_var: &mut JsonVar) -> Result<(), String> {
+pub fn check_set_cpu_affinity(suricata_string: &mut Value, suriconf: &Suriconf, json_var: &mut JsonVar, datetime: &DateTime<Utc>) -> Result<(), String> {
     let interface_spec = Interface::default();
 
     let set_cpu_affinity = suricata_string.get_mut("threading").ok_or("Unable to get threading section.")?
@@ -162,14 +163,14 @@ pub fn check_set_cpu_affinity(suricata_string: &mut Value, suriconf: &Suriconf, 
 
         let edited_max_cpu_usage_vec = suriconf.max_cpu_usage_vec.get((RECYCLER_START+MANAGER_START) as usize..).map(|v| v.to_vec()).ok_or("Unable to parse cpu_set vector.")?;
 
-        match set_workers_set(suricata_string, suriconf, edited_max_cpu_usage_vec) {
+        match set_workers_set(suricata_string, suriconf, edited_max_cpu_usage_vec, datetime) {
             Err(e) => {panic!("{e}")},
             Ok(()) => {}
         }
     }
     else if suriconf.modules.contains(&Modules::CpuAffinity) {
         // max_cpu_usage_vec is just for worker threads
-        match set_workers_set(suricata_string, suriconf, suriconf.max_cpu_usage_vec.clone()) {
+        match set_workers_set(suricata_string, suriconf, suriconf.max_cpu_usage_vec.clone(), datetime) {
             Err(e) => { return Err(e) },
             Ok(()) => {}
         }
@@ -181,13 +182,13 @@ pub fn check_set_cpu_affinity(suricata_string: &mut Value, suriconf: &Suriconf, 
             Ok(()) => {}
         }
 
-        match check_for_interface_specific_workers_set_or_take_default(suricata_string, suriconf) {
+        match check_for_interface_specific_workers_set_or_take_default(suricata_string, suriconf, datetime) {
             Err(e) => { return Err(e) }
             Ok(()) => {}
         }
     }
     else {
-        match check_for_interface_specific_workers_set_or_take_default(suricata_string, suriconf) {
+        match check_for_interface_specific_workers_set_or_take_default(suricata_string, suriconf, datetime) {
             Err(e) => { return Err(e) }
             Ok(()) => {}
         }
@@ -215,7 +216,7 @@ pub fn check_set_cpu_affinity(suricata_string: &mut Value, suriconf: &Suriconf, 
     Ok(())
 }
 
-pub fn set_workers_set(suricata_string: &mut Value, suriconf: &Suriconf, workers: Vec<u64>) -> Result<(), String> {
+pub fn set_workers_set(suricata_string: &mut Value, suriconf: &Suriconf, workers: Vec<u64>, datetime: &DateTime<Utc>) -> Result<(), String> {
     let worker_set = suricata_string.get_mut("threading").ok_or("Unable to get threading section.")?.get_mut("cpu-affinity")
         .and_then(|w| w.get_mut("worker-cpu-set")).ok_or("Unable to parse worker-cpu-set.")?;
 
@@ -278,7 +279,7 @@ pub fn set_workers_set(suricata_string: &mut Value, suriconf: &Suriconf, workers
 
     worker_set.push(interface_value);
 
-    set_interface_with_threads(suricata_string, suriconf, workers);
+    set_interface_with_threads(suricata_string, suriconf, workers, datetime);
     Ok(())
 }
 
@@ -293,7 +294,7 @@ pub fn set_management_set(suricata_string: &mut Value, suriconf: &Suriconf) ->  
     Ok(())
 }
 
-pub fn check_for_interface_specific_workers_set_or_take_default(suricata_string: &mut Value, suriconf: &Suriconf) -> Result<(), String> {
+pub fn check_for_interface_specific_workers_set_or_take_default(suricata_string: &mut Value, suriconf: &Suriconf, datetime: &DateTime<Utc>) -> Result<(), String> {
     let interfaces = suricata_string.get_mut("threading").ok_or("Unable to get threading section.")?
         .get_mut("cpu-affinity").ok_or("Unable to get cpu-affinity section.")?
         .get_mut("worker-cpu-set").ok_or("Unable to get worker-cpu-set section.")?.get_mut("interface-specific-cpu-set");
@@ -316,7 +317,7 @@ pub fn check_for_interface_specific_workers_set_or_take_default(suricata_string:
         }
     }
     if threads > 0 {
-        set_interface_with_threads(suricata_string, suriconf, cpus);
+        set_interface_with_threads(suricata_string, suriconf, cpus, datetime);
     }
     else {
         // default
@@ -330,10 +331,15 @@ pub fn check_for_default(suricata_string: &mut Value, suriconf: &Suriconf) {
     //     .get_mut("cpu-affinity").ok_or("Unable to get cpu-affinity section.")?
 }
 
-pub fn create_nic_bash_file() -> File {
+pub fn create_nic_bash_file(datetime: &DateTime<Utc>) -> File {
+    let mut nic = PathBuf::from("./tmp");
+    if !nic.exists() {
+        fs::create_dir_all(&nic).expect("Unable to create tmp directory.");
+    }
+
+    nic.push(format!("nic_setup{}.sh", datetime.format("-%Y-%m-%d-%H:%M:%S")));
     let mut nic_file = OpenOptions::new().create(true)
-        .write(true).truncate(true).open("nic_setup.sh")
-        .expect("Unable to create nic_setup.sh.");
+        .write(true).truncate(true).open(nic).expect("Unable to create nic_setup.sh.");
     writeln!(nic_file, "#!/bin/bash").expect("Unable to write to bash file.");
     writeln!(nic_file, "set -e").expect("Unable to write to bash file.");;
     nic_file
@@ -537,20 +543,22 @@ pub fn disable_irqbalance(nic_file: &mut File) {
     run_command_and_write_it_down("sudo", &["systemctl", "stop", "irqbalance"], nic_file);
 }
 
-pub fn disable_gro_lro(interface: &str, ethtool: &str, nic_file: &mut File) {
-    run_command_and_write_it_down("sudo", &[format!("{ethtool}").as_str(), "-K" , format!("{interface}").as_str(), "gro", "off"], nic_file);
-    run_command_and_write_it_down("sudo", &[format!("{ethtool}").as_str(), "-K" ,format!("{interface}").as_str(), "lro", "off"], nic_file);
+pub fn disable_offloading(interface: &str, ethtool: &str, nic_file: &mut File) {
+    let offloads = ["rx", "tx", "tso", "gro", "lro", "tx", "sg", "txvlan", "rxvlan"];
+    for offload in offloads {
+        run_command_and_write_it_down("sudo", &[format!("{ethtool}").as_str(), "-K" ,format!("{interface}").as_str(), offload , "off"], nic_file);
+    }
 }
 
-pub fn set_interface_with_threads(suricata_string: &mut Value, suriconf: &Suriconf, mut cpus: Vec<u64>) {
+pub fn set_interface_with_threads(suricata_string: &mut Value, suriconf: &Suriconf, mut cpus: Vec<u64>, datetime: &DateTime<Utc>) {
     let mut found = false;
     match suriconf.capture_mode {
         CaptureMode::AF_PACKET => {
             if suriconf.modules.contains(&Modules::CpuAffinity)  {
-                let mut nic_file = yaml::create_nic_bash_file();
+                let mut nic_file = yaml::create_nic_bash_file(datetime);
                 disable_irqbalance(&mut nic_file);
                 let ethtool = suriconf.ethtool_bin.to_str().expect("Unable to transform path to Ethtool to str.");
-                disable_gro_lro(&suriconf.interface, ethtool, &mut nic_file);
+                disable_offloading(&suriconf.interface, ethtool, &mut nic_file);
                 let shrink = set_rss(&suriconf.interface, cpus.len() as u64, ethtool, &mut nic_file);
                 if shrink != 0 { // remove cpus to match RSS queues
                  cpus.drain(0..shrink as usize);

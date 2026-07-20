@@ -10,7 +10,7 @@ use std::path::PathBuf;
 use serde_json::{Deserializer, Value};
 use std::collections::HashMap;
 use serde::Serialize;
-use chrono::{DateTime, FixedOffset};
+use chrono::{DateTime, FixedOffset, Utc};
 use crate::structures::{AppLayerProtocols, TrasportProtocols, CreatedLogs, Thread, SystemVar};
 
 pub fn open_json(file: &PathBuf) -> Result<BufReader<File>, Box<dyn std::error::Error>> {
@@ -78,6 +78,7 @@ pub fn find_emerg_mode_entered(stats: &Value) -> Option<bool> {
 pub struct Preconfiguration {
     threads_stat: Vec<Thread>,
     ethtool_stat: Vec<CpuThread>,
+    datetime :DateTime<Utc>,
     flow: FlowStructure,
     decoder: DecoderStructure,
     ippair: IPPairStructure,
@@ -174,10 +175,11 @@ pub struct Flow {
 }
 
 impl Preconfiguration {
-    pub fn new(sys: SystemVar) -> Self {
+    pub fn new(sys: SystemVar, datetime: DateTime<Utc>) -> Self {
         let mut preconf = Self::default();
         preconf.threads_stat = sys.threads;
         preconf.ethtool_stat = sys.ethtool_stat;
+        preconf.datetime =  datetime;
         preconf
     }
 
