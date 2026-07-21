@@ -1,5 +1,7 @@
 """
 Author(s): Eliška Červinková <eliska.cervinkova@cesnet.cz>
+Copyright: (C) 2026 CESNET, z.s.p.o.
+SPDX-License-Identifier: BSD-3-Clause
 
 This file generates box plots from file result.txt.
 Code was partially generated with assistance from Google Gemini.

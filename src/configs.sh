@@ -1,6 +1,8 @@
 #!/bin/bash
 
 # Author(s): Eliška Červinková <eliska.cervinkova@cesnet.cz>
+# Copyright: (C) 2026 CESNET, z.s.p.o.
+# SPDX-License-Identifier: BSD-3-Clause
 
 # This file generates Suricata configuration files and NIC settings.
 
