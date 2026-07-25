@@ -10,10 +10,7 @@ use std::path::PathBuf;
 extern crate chrono;
 use chrono::offset::Utc;
 use chrono::DateTime;
-use std::time::{SystemTime};
 use std::fs;
-use std::thread;
-use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::{BTreeMap, HashMap};
@@ -32,7 +29,7 @@ pub enum Reason {
     shutdown,
     forced,
     emergency,
-    tcp_reuse // TODO, in future think about tcp_reuse
+    tcp_reuse
 }
 
 impl Reason {

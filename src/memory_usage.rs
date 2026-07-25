@@ -22,7 +22,7 @@ pub struct MemoryModule {
 }
 
 impl Module for MemoryModule {
-    fn new(analysis: &Analysis, debug: bool) -> Self {
+    fn new(_analysis: &Analysis, debug: bool) -> Self {
         let keys = [
             Keys::max_memory_usage,
             Keys::memcap_pressure,

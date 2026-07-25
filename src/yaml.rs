@@ -27,7 +27,7 @@ pub fn open_yaml(file: &PathBuf) -> Result<Value, Box<dyn std::error::Error>> {
     Ok(text)
 }
 
-pub fn open_yaml_with_comments(file: &PathBuf) {
+pub fn open_yaml_with_comments(_file: &PathBuf) {
     todo!()
 }
 
@@ -327,7 +327,7 @@ pub fn check_for_interface_specific_workers_set_or_take_default(suricata_string:
     Ok(())
 }
 
-pub fn check_for_default(suricata_string: &mut Value, suriconf: &Suriconf) {
+pub fn check_for_default(_suricata_string: &mut Value, _suriconf: &Suriconf) {
     // default
     // let defalut_workers =suricata_string.get_mut("threading").ok_or("Unable to get threading section.")?
     //     .get_mut("cpu-affinity").ok_or("Unable to get cpu-affinity section.")?

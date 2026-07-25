@@ -45,19 +45,19 @@ impl Jsons {
                 FileNames::suricata | FileNames::suriconf => {
                     let yaml = match yaml::open_yaml(self.path(resources, &file_name)) {
                         Ok(yaml) => {yaml},
-                        Err(e) => {return Err(Box::from("Unable to parse yaml file to value."))}
+                        Err(e) => {return Err(Box::from(format!("Unable to parse yaml file to value. {e}")))}
                     };
                     yaml::yaml_to_json(yaml)
                 },
                 FileNames::preconf => {
                     let json = match open_json(self.path(resources, &file_name)) {
                         Ok(json) => {json},
-                        Err(e) => {return Err(Box::from("Unable to parse json file to value."))}
+                        Err(e) => {return Err(Box::from(format!("Unable to parse json file to value. {e}")))}
                     };
 
                     match json_to_value(json) {
                         Ok(json) => {json},
-                        Err(e) => {return Err(Box::from("Unable to parse json file to value."))}
+                        Err(e) => {return Err(Box::from(format!("Unable to parse json file to value. {e}")))}
                     }
                 }
             };
