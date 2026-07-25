@@ -810,7 +810,7 @@ dpdk:
       mtu: 1500 # Set MTU of the device in bytes
       vlan-strip-offload: false # if possible enable hardware vlan stripping
       # rss-hash-functions: 0x0 # advanced configuration option, use only if you use untested NIC card and experience RSS warnings,
-      # For `rss-hash-functions` use hexadecimal 0x01ab format to specify RSS hash function flags - DumpRssFlags can help (you can see output if you use -vvv option during Suri startup)
+      # For `rss-hash-functions` use hexadecimal 0x01ab format to specify RSS hash function flags - DumpRssFlags can help (you can see output if you use -vvv option during Suricata startup)
       # setting auto to rss_hf sets the default RSS hash functions (based on IP addresses)
       # linkup-timeout: 0 # how many seconds to wait before giving up, 0 to disable link state checking
 

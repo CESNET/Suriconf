@@ -47,7 +47,7 @@ pub struct Args {
 pub enum Commands {
 
     /// Change defaults for Suricata
-    Suri {
+    Suricata {
         /// Change path to bin
         #[clap(short='b', long)]
         path_to_bin: Option<PathBuf>,
