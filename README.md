@@ -1,103 +1,94 @@
-# Suricata-autoconfigurer
+# Suriconf: configuration assistant for Suricata
 
-An information manual for setting up Suriconf, a configuration assistant for Suricata.
+[![License](https://img.shields.io/badge/license-BSD-blue.svg)](LICENSE)
+[![Rust](https://img.shields.io/badge/rust-1.88+-orange.svg)](https://rustup.rs/)
+[![Bachelor's Thesis](https://img.shields.io/badge/thesis-completed-success)](https://www.vut.cz/studenti/zav-prace/detail/170986)
 
----
+Suriconf is an automated configuration assistant for [Suricata](https://github.com/OISF/suricata). It analyzes network traffic and system resources to optimize Suricata's configuration through a modular approach. Each module uses mathematical methods and performance metrics to configure specific Suricata components. Testing showed Suriconf v1.0-dev successfully configured Suricata in 80.8% of test cases with [rules](https://community.emergingthreats.net/).
 
-- [Suricata-autoconfigurer](#suricata-autoconfigurer)
-  - [1. Dependencies](#1-dependencies)
-  - [2. Suriconf Configuration](#2-suriconf-configuration)
-    - [2.1 Configuration Overview](#21-configuration-overview)
-    - [2.2 Modules](#22-modules)
-    - [2.3 Variables](#23-variables)
-  - [3. How to Run](#3-how-to-run)
-  - [4. Expected Output](#4-expected-output)
+## Contents
 
 ---
-
-## 1. Dependencies
-
-It is necessary to install **rustup**. Installation instructions are available at:  
-https://rustup.rs/
-> [!WARNING]
-The Rust compiler version must be higher than 1.88.
-
-The remaining dependencies required by Suriconf are defined in its configuration. These binaries must be installed and their paths provided in the configuration file. The required tools include:
-
-- Suricata (version 9.0.0-dev (d030a9c4e 2026-04-01))
-- ethtool (version 5.13)
-- ifconfig (net-tools 2.10-alpha)
-- ip (ip utility, iproute2-6.8.0, libbpf 0.5.0)
-
+  - [Prerequisites](#prerequisites)
+    - [Rust toolchain](#rust-toolchain)
+  - [Configuration](#configuration)
+    - [Configuration overview](#configuration-overview)
+    - [Modules](#modules)
+    - [Variables](#variables)
+  - [Usage](#usage)
+  - [Output](#output)
 ---
 
-## 2. Suriconf configuration file
+## Prerequisites
 
-### 2. 1. Configuration Overview
-
-- The entire configuration is defined in a YAML file, typically named `suriconf.yaml`.
-
-- The default Suricata configuration file is specified by the **`suri-configuration`** parameter.
-
-- The **`log-dir`** parameter defines the directory where Suricata logs are stored.  
-  This directory must have read and write permissions.
-
-- The **`preconf-time`** parameter defines the duration of the Suricata preconfiguration run.  
-  > [!WARNING] 
-  The flow threads module requires a minimum of 6 minutes to configure properly.
-
-- The **`analysis`** parameter determines whether Suricata performs multiple runs with different configuration options (dynamic) or whether all decisions are derived from a single preconfiguration run (static).  
-  > [!WARNING]
-  In version 1.0-dev, only static analysis is supported.
-
-- The **mode** defines whether Suriconf writes changes directly into the configuration file or only provides configuration suggestions:
-    - suggestion mode: only recommendations are provided
-    - modify mode: configuration is modified automatically
-
-- The **modify mode** includes two submodes:
-    - ask mode (user confirms changes)
-    - force mode (all detected changes are applied automatically)
-
-    > [!WARNING]
-    In version 1.0-dev, only **modify mode with `yaml_change: force`** is supported.
-
----
-
-### 2. 2. Modules
-
-- The `modules` section defines all available modules.
-- Each module can be enabled or disabled using the `enabled` parameter (`true` / `false`).
-- If a module is disabled, Suricata uses its default configuration from `suricata.yaml`.
+### Rust toolchain
+1. Install Rustup from [rustup.rs](https://rustup.rs/).
+2. Verify your Rust version: `rustc --version`.
 
 > [!WARNING]
-When disabling the `cpu_affinity` module, an interface-specific CPU affinity configuration must be defined in `suricata.yaml`.
+> Minimum required version of rustc is 1.88 or higher.
 
----
+### Required binaries
 
-### 2. 3. Variables
+The following tools must be installed, and their paths must be accessible and specified in the configuration file.
 
-- The `variables` section defines runtime and hardware-related settings:
-    - network interface used by Suricata
-    - packet capture mode (only AF_PACKET)
-    - maximum memory usage
-    - CPU core vector used by Suriconf
+| Tool | Version |
+|------|---------|
+| Suricata | 9.0.0-dev (d030a9c4e 2026-04-01) |
+| ethtool | 5.13 |
+| ifconfig | net-tools 2.10-alpha |
+| ip | iproute2-6.8.0, libbpf 0.5.0 |
 
-- The CPU vector defines logical cores intended for Suriconf configuration and later selection for Suricata execution.
+## Configuration
 
-- If `flow_threads` is enabled:
-    - management threads are taken from the `max_cpu_usage` vector
+### Configuration overview
 
-- When `cpu_affinity` is enabled at startup:
-    - remaining cores from the `max_cpu_usage` vector are assigned to worker threads
-    - the number of allocated CPU cores corresponds to the number of RX RSS queues of the network interface
+The entire configuration is defined in a YAML file, typically named `suriconf.yaml`.
 
----
+| Parameter | Description                                                                                                                                                                                                                                      |
+|-----------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `suri-configuration` | Path to the default Suricata configuration file.                                                                                                                                                                                      |
+| `log-dir` | Directory for Suricata logs (requires read/write permissions).                                                                                                                                                                                   |
+| `preconf-time` | Duration of the Suricata preconfiguration run.                                                                                                                                                                                              |
+| `analysis` | Analysis type: `dynamic` (multiple Suricata runs) or `static` (single Suricata run).                                                                                                                                                            |
+| `mode` | Output mode: `suggestion` (recommendations only) or `modify` (writes changes to Suricata configuration file).<br>Modify mode with `yaml_change`: `ask` (user confirms each change) or `force` (all detected changes arre applied automatically).    | 
 
-## 3. How to run
+> [!WARNING]
+> - Flow threads module requires minimum 6 minutes (`preconf-time`).
+> - Version 1.0-dev supports only `static` analysis.
+> - Version 1.0-dev supports only `modify` mode with `yaml_change: force`.
 
-One of the highly recommended practices, or even a requirement when running Suriconf, is isolating CPU cores specified in the `max_cpu_usage` vector.
-The purpose of this is to prevent Suriconf from producing inaccurate estimates due to interference from other processes consuming CPU resources.
-One possible approach is to use the `grubby` kernel parameter. Below is an example of isolating CPU cores 2 to 4, followed by a system reboot:
+
+### Modules
+
+The `modules` section defines all available modules. Each module can be enabled or disabled using the `enabled` parameter (`true` / `false`).
+
+> [!NOTE]
+> For disabled modules, Suriconf uses the default configuration from the Suricata configuration file.
+
+> [!WARNING]
+> When disabling `cpu_affinity` module, you must define interface-specific CPU affinity section in default Suricata configuration file.
+
+### Variables
+
+The `variables` section defines runtime and hardware settings.
+
+| Setting              | Description                                            |
+|----------------------|--------------------------------------------------------|
+| `interface`          | Network interface used by Suricata.                    |
+| `capture_mode`       | Only AF_PACKET (`af_packet`) supported.                |
+| `max_memory_usage`   | Maximum memory usage limit for Suricata configuration. |
+| `max_cpu_usage_vec`  | Logical cores for Suricata configuration.              |
+
+**CPU allocation**
+- **Management threads** (when `flow_threads` module enabled): taken from `max_cpu_usage_vec` vector.
+- **Worker threads** (when `cpu_affinity` module enabled): assigned from remaining cores, limited by RX RSS queue count (fewer queues = fewer cores used).
+
+## Usage
+
+Isolate CPU cores specified in the `max_cpu_usage_vec` vector to prevent interference from other processes.
+
+Isolate cores 2-4 using `grubby`:
 
 ```bash
 sudo grubby --update-kernel=ALL --args="isolcpus=2-4" && sudo reboot
@@ -109,19 +100,17 @@ Use the Cargo package manager to run the project in `src` directory:
 cargo run
 ```
 
-To display available options, pass the -h flag after -- (all Suriconf parameters has to be behind --):
+To display available options, pass the `-h` flag after `--`:
 
 ```bash
 cargo run -- -h
 ```
 
----
+> [!NOTE]
+> All Suriconf parameters must be passed after `--`.
 
-## 4. Expected output 
-The expected output should be a successful configuration process that creates `suricata_result.yaml` and `nic_setup.sh` (used for configuring the NIC and **must be executed before running Suricata**), both with the same timestamp.
+## 4. Output
+The expected output should be a successful configuration process that creates `suricata_result.yaml` and `nic_setup.sh`, both with the same timestamp.
 
----
-
-
-## 5. Bachelor's thesis testing
-All testing results are saved in directory `bt_tests_results` and resources used during testing are in directory `bt_tests_resources`. The Suriconf binary is stored in `src`.
+> [!IMPORTANT]
+> Execute `nic_setup.sh` before running Suricata to apply network interface settings.
