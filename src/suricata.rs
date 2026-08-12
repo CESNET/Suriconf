@@ -6,11 +6,10 @@ SPDX-License-Identifier: BSD-3-Clause
 This file executes Suricata.
 */
 
-use std::path::PathBuf;
 use std::process::{Child, Command};
 use crate::yaml::{emergency_check_memcap, Suriconf};
-use crate::{json, FLOW_WINDOW, WINDOWS, MIN_RUN};
-use crate::json::{check_emergency, CpuThread, Preconfiguration};
+use crate::{FLOW_WINDOW, MIN_RUN};
+use crate::json::{check_emergency, CpuThread};
 use crate::structures::{Thread, SystemVar, CreatedLogs, CaptureMode, SuricataAgain, Modules};
 use is_executable::IsExecutable;
 use std::time::Duration;
@@ -18,12 +17,10 @@ use crossbeam_channel::{bounded, select, tick, Receiver};
 use std::process::Stdio;
 use std::io::{BufRead, BufReader};
 use std::thread;
-use sysinfo::System;
 use procfs::process::{all_processes, Process};
-use scirs2_core::convenience::boolean;
 use signal_hook::consts::SIGINT;
 use signal_hook::iterator::Signals;
-use std::sync::{atomic, Arc, Mutex};
+use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicBool, Ordering};
 
 pub fn execute_suricata<'a>(suriconf: &Suriconf, logs: &mut CreatedLogs, options: &Vec<String>) -> Option<(SystemVar, SuricataAgain)> {

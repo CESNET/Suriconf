@@ -54,7 +54,7 @@ pub fn check_emergency(stats: &PathBuf) -> bool {
 
     let last_stat = match get_the_last_one_stats(stats) {
         Ok(last_stat) => {last_stat},
-        Err(e) => {return false;}
+        Err(_e) => {return false;}
     };
 
     match find_emerg_mode_entered(&last_stat) {
@@ -704,8 +704,8 @@ impl Preconfiguration {
                         value.get("flow").and_then(|a| a.get("pkts_toclient")).and_then(|f| f.as_u64()).ok_or("Cannot find packets to client.")?;
                     let bytes_to_client = flow.get("bytes_toclient").and_then(|f| f.as_u64()).ok_or("Cannot find bytes to client.")?;
                     let bytes_to_server = flow.get("bytes_toserver").and_then(|f| f.as_u64()).ok_or("Cannot find packets bytes to server.")?;
-                    let start = flow.get("start").ok_or("Cannot find start flow value").and_then(|s| self.find_flow_start_end_time(s, true))?;
-                    let end = flow.get("end").ok_or("Cannot find end flow value").and_then(|e| self.find_flow_start_end_time(e, false))?;
+                    let start = flow.get("start").ok_or("Cannot find start flow value").and_then(|s| self.find_flow_start_end_time(s))?;
+                    let end = flow.get("end").ok_or("Cannot find end flow value").and_then(|e| self.find_flow_start_end_time(e))?;
                     let state = flow.get("state").and_then(|f| f.as_str()).ok_or("Cannot find a flow state.")?.to_string();
                     let reason = flow.get("reason").and_then(|f| f.as_str()).ok_or("Cannot find a flow reason.")?.to_string();
                     let proto = value.get("proto").and_then(|f| f.as_str()).ok_or("Cannot find a flow protocol.")?.to_string();
@@ -736,7 +736,7 @@ impl Preconfiguration {
         Ok(())
     }
 
-    pub fn find_flow_start_end_time(&self, time: &Value, start: bool) -> Result<u64, &'static str> {
+    pub fn find_flow_start_end_time(&self, time: &Value) -> Result<u64, &'static str> {
         let time_str = time.as_str().ok_or("Time is not a string.")?;
 
         let date_time: DateTime<FixedOffset> = time_str.parse().map_err(|_| "Invalid timestamp")?;

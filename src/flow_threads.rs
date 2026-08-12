@@ -6,7 +6,7 @@ SPDX-License-Identifier: BSD-3-Clause
 This file represents a Flow threads module.
 */
 
-use crate::structures::{Keys, ModuleResult, RobRegression, Analysis, Thread, Answer, Change, Reason};
+use crate::structures::{Keys, ModuleResult, RobRegression, Analysis, Thread, Answer, Change};
 use crate::module::Module;
 use std::collections::{HashMap};
 use serde_json::{Value};
@@ -27,7 +27,7 @@ pub struct RecyclerUp {
 }
 
 impl Module for FlowThreadsModule {
-    fn new(analysis: &Analysis, debug: bool) -> Self {
+    fn new(_analysis: &Analysis, debug: bool) -> Self {
         let keys = [
             Keys::flow_recyclers,
             Keys::flow_managers,

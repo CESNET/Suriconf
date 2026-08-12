@@ -12,7 +12,7 @@ use crate::module::Module;
 use std::collections::HashMap;
 use serde_json::{Value};
 use std::collections::BTreeMap;
-use crate::{FLOW_WINDOW, MAX_AVG_RATIO, LOAD_FACTOR, MIN_AVG_RATIO, FLOW_OBJECT, SYNC_AVG, FLOW_BUCKET, FLOW_LOCAL_THREAD_MAX, MULTIPLIER};
+use crate::{FLOW_WINDOW, MAX_AVG_RATIO, LOAD_FACTOR, MIN_AVG_RATIO, FLOW_OBJECT, FLOW_BUCKET, FLOW_LOCAL_THREAD_MAX, MULTIPLIER};
 
 #[derive(Debug)]
 pub struct FlowModule {
@@ -30,7 +30,7 @@ pub struct Counter {
 }
 
 impl Module for FlowModule {
-    fn new(analysis: &Analysis, debug: bool) -> Self {
+    fn new(_analysis: &Analysis, debug: bool) -> Self {
         let keys = [
             Keys::max_memory_usage,
             Keys::threads_stat,
@@ -211,7 +211,7 @@ impl FlowModule {
             for flow in &time.1.hashes {
                 let v = current_queues.entry(*flow.0).or_insert(0);
                 *v += *flow.1;
-                if (*v > counter.current_max) {
+                if *v > counter.current_max {
                     counter.current_max = *v;
                 }
             }

@@ -15,13 +15,24 @@ macro_rules! mods {
     };
 }
 
-mods!(argument, structures, yaml, suricata, json,
-    memory_usage, query, flow, flow_threads, regression,
-    module, cpu_affinity);
+mods!(
+    argument,
+    structures,
+    yaml,
+    suricata,
+    json,
+    memory_usage,
+    query,
+    flow,
+    flow_threads,
+    regression,
+    module,
+    cpu_affinity
+);
 
 static FLOW_WINDOW: u64 = 5; // in seconds
 static MIN_RUN: u64 = 360;
-static WINDOWS:u64 = 3;
+static WINDOWS: u64 = 3;
 static ACTIVE_LIMIT: u64 = 512;
 static FRAGMENTS: f64 = 4.0;
 static MTU: u64 = 1500;
@@ -32,7 +43,7 @@ static FLOW_OBJECT: f64 = 312.0; // 296 B for flow object // reality 272 B
 static PACKET: f64 = 464.0;
 static HOST_HASHROW: f64 = 64.0;
 static IPPAIR_HASHROW: f64 = 64.0;
-static  DEFRAG_TRACKER_HASHROW: f64 = 48.0;
+static DEFRAG_TRACKER_HASHROW: f64 = 48.0;
 static HOST_OBJECT: f64 = 120.0; // prealloc
 static IPPAIR_OBJECT: f64 = 136.0;
 static DEFRAG_TRACKER: f64 = 144.0;
@@ -45,7 +56,7 @@ static LOAD_FACTOR: f64 = 2f64;
 static MAX_AVG_RATIO: i64 = 3;
 static MIN_AVG_RATIO: f64 = 0.5;
 static RECYCLER_START: u8 = 1;
-static  MANAGER_START: u8 = 1;
+static MANAGER_START: u8 = 1;
 static SYNC_AVG: u64 = 100;
 static MULTIPLIER: f64 = 1.2;
 
@@ -58,7 +69,7 @@ static DEFAULT_PACKET_SIZE: DefaultPacketSize = DefaultPacketSize::Average;
 
 static CPU_USAGE_MAX: f32 = 95.0;
 
-static  CPU_USAGE: f64 = 50.0;
+static CPU_USAGE: f64 = 50.0;
 static HUBER_THRESHOLD: f64 = 0.0;
-static MANAGER_SLOPE: f64 = 0.1;  // once every 10 s
+static MANAGER_SLOPE: f64 = 0.1; // once every 10 s
 static PANIC_THRESHOLD: u64 = 100;

@@ -10,7 +10,7 @@ use scirs2_core::ndarray::{Array1, Array2};
 use scirs2_stats::{huber_regression, theilslopes};
 
 pub fn  my_huber_regression(vector_values: Vec<f64>, uptime: u64, time_period: u64, num_elements: u64) -> Vec<f64> {
-    let loops: u64 = uptime/(time_period*num_elements);
+    let _loops: u64 = uptime/(time_period*num_elements);
     let loops = 3;
     let mut huber_reg_vec: Vec<f64> = Vec::new();
     let vector_time: Vec<f64> = (0..uptime).step_by(time_period as usize).map(|v| v as f64).collect();
@@ -22,7 +22,7 @@ pub fn  my_huber_regression(vector_values: Vec<f64>, uptime: u64, time_period: u
 
          let result = match huber_regression(&x.view(), &y.view(), None, None, None, None, None, None) {
              Ok(result) => {result},
-             Err(e) => {
+             Err(_e) => {
                   //println!("{e} {:?}", y);
                  huber_reg_vec.push(0.0);
                  continue}
@@ -49,7 +49,7 @@ pub fn my_theil_sen_regression(vector_values: Vec<f64>, uptime: u64, time_period
 
          let result = match theilslopes(&x.view(), &y.view(), None, None){
              Ok(result) => {result},
-             Err(e) => {
+             Err(_e) => {
                  //println!("{e} {:?}", y);
                  theil_sen_vec.push(0.0);
                 continue}

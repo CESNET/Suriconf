@@ -13,7 +13,7 @@ use std::fs;
 use crate::json::CpuThread;
 use crate::module::Module;
 use crate::structures::{Analysis, Answer, Change, Keys};
-use crate::{CPU_MULTIPLIER, PANIC_THRESHOLD, CPU_USAGE};
+use crate::{CPU_MULTIPLIER, CPU_USAGE};
 use std::process::Command;
 use itertools::{izip};
 use std::fs::File;
@@ -27,7 +27,7 @@ pub struct CpuAffinityModule {
 
 impl Module for CpuAffinityModule {
 
-    fn new(analysis: &Analysis, debug: bool) -> Self {
+    fn new(_analysis: &Analysis, debug: bool) -> Self {
         let keys = [
             Keys::threads_stat,
             Keys::wrk_cpu_set,
@@ -84,7 +84,7 @@ impl Module for CpuAffinityModule {
         self.module_disable_offloading(answers, &mut nic_file);
         self.module_set_rss(answers, &mut nic_file);
         self.module_af_packet_tuning(answers, &mut nic_file);
-        self.set_af_packet_threads(answers);
+        self.set_af_packet_threads();
         self.module_set_hard_irq(answers, &mut nic_file);
 
         Change::collect_changes(&self.questions)
@@ -212,7 +212,7 @@ impl CpuAffinityModule {
         for i in 0..vector.len() {
             let current = vector.get(i).expect("Unable to get u64.");
             if i != 0 {
-                let before = vector.get(i-1).expect("Unable to get u64.");;
+                let before = vector.get(i-1).expect("Unable to get u64.");
                  clean_vector.push(*current - *before);
             }
             else {
@@ -443,7 +443,7 @@ impl CpuAffinityModule {
         self.get_capture_kernel_drops_stat(answers).iter().map(|a| a.value.last().expect("Expected element.")).sum::<u64>()
     }
 
-    fn get_wrk_cpu_set(&self, answers: &Vec<Answer<'_>>) -> Vec<u64> {
+    fn get_wrk_cpu_set(&self) -> Vec<u64> {
         self.questions
             .get(&Keys::wrk_cpu_set).expect("Unable to get wrk_cpu_set.").as_array()
             .expect("wrk_cpu_set is not an array").iter()
@@ -474,7 +474,7 @@ impl CpuAffinityModule {
         }
         else {
             let mut cpu_counter = 0;
-            let numa_cpus = self.get_numa_node_with_cpus(answers, numa_node);
+            let numa_cpus = self.get_numa_node_with_cpus(numa_node);
             for cpu in &max_cpu_usage_vec {
                 if cpu_counter == new_workers  {
                     break;
@@ -498,8 +498,8 @@ impl CpuAffinityModule {
         new_wrk_cpu_set
     }
 
-    fn set_af_packet_threads(&mut self, answers: &Vec<Answer<'_>>) {
-        let wrk_cpu_set_len = self.get_wrk_cpu_set(answers).len() as u64;
+    fn set_af_packet_threads(&mut self) {
+        let wrk_cpu_set_len = self.get_wrk_cpu_set().len() as u64;
         *self.questions.get_mut(&Keys::af_packet_interface_threads).expect("Unable to get af_packet_interface_threads") =
             Value::Number(wrk_cpu_set_len.into());
     }
@@ -522,7 +522,7 @@ impl CpuAffinityModule {
         numa_node
     }
 
-    fn get_numa_node_with_cpus(&self, answers: &Vec<Answer<'_>>, numa_node: i8) -> Vec<u64> {
+    fn get_numa_node_with_cpus(&self, numa_node: i8) -> Vec<u64> {
         let numa_node_cpus = fs::read_to_string(
             format!("/sys/devices/system/node/node{numa_node}/cpulist")
         ).expect("Failed to read file.");
@@ -533,20 +533,20 @@ impl CpuAffinityModule {
         let interface = self.get_interface_stat(answers);
         let ethtool =  self.get_ethtool_stat(answers);
         let ifconfig = answers.iter().find(|h| h.key == &Keys::ifconfig).and_then(|h| h.value.as_str()).expect("Ifconfig cannot be found.");
-        let wrk_cpu_set_len = self.get_wrk_cpu_set(answers).len() as u64;
+        let wrk_cpu_set_len = self.get_wrk_cpu_set().len() as u64;
         yaml::af_packet_tuning(interface, wrk_cpu_set_len, ethtool, ifconfig, nic_file);
     }
 
     fn module_set_rss(&self, answers: &Vec<Answer<'_>>, nic_file: &mut File) {
         let interface = self.get_interface_stat(answers);
         let ethtool =  self.get_ethtool_stat(answers);
-        let wrk_cpu_set_len = self.get_wrk_cpu_set(answers).len() as u64;
+        let wrk_cpu_set_len = self.get_wrk_cpu_set().len() as u64;
         _ = yaml::set_rss(interface, wrk_cpu_set_len, ethtool, nic_file);
     }
 
     fn module_set_hard_irq(&self, answers: &Vec<Answer<'_>>, nic_file: &mut File) {
         let interface = self.get_interface_stat(answers);
-        let wrk_cpu_set = self.get_wrk_cpu_set(answers);
+        let wrk_cpu_set = self.get_wrk_cpu_set();
         yaml::set_hard_irq(interface, &wrk_cpu_set, nic_file);
     }
 
