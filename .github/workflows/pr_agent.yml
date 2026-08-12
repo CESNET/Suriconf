@@ -1,0 +1,35 @@
+name: PR Agent
+
+on:
+  pull_request:
+    types: [opened, reopened, ready_for_review, synchronize]
+  issue_comment:
+
+jobs:
+  pr_agent_job:
+    if: ${{ github.event.sender.type != 'Bot' && (github.event_name == 'pull_request' || github.event.issue.pull_request) }}
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      pull-requests: write
+      contents: write
+
+    name: Run PR Agent on every pull request, respond to user comments
+
+    steps:
+      - name: PR Agent action step
+        uses: the-pr-agent/pr-agent@main
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OPENAI__API_BASE: ${{ secrets.EINFRA_API_BASE }}
+          OPENAI__KEY: ${{ secrets.EINFRA_API_KEY }}
+          config.model: ${{ secrets.EINFRA_MODEL }}
+          config.model_weak: ${{ secrets.EINFRA_MODEL_WEAK }}
+          config.custom_model_max_tokens: "256000"
+          config.fallback_models: "[]"
+          github_action_config.auto_review: "true"
+          github_action_config.auto_describe: "true"
+          github_action_config.auto_improve: "true"
+          pr_reviewer.num_max_findings: "5"
+          pr_code_suggestions.num_code_suggestions_per_chunk: "5"
+          pr_code_suggestions.demand_code_suggestions_self_review: "true"
