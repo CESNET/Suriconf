@@ -61,7 +61,7 @@ The entire configuration is defined in a YAML file, typically named `suriconf.ya
 
 ### Modules
 
-The `modules` section defines all available modules. Each module can be enabled or disabled using the `enabled` parameter (`true` / `false`).
+The `modules` section defines all available modules. For a detailed description of each module, see [MODULES.md](MODULES.md). Each module can be enabled or disabled using the `enabled` parameter (`true` / `false`).
 
 > [!NOTE]
 > For disabled modules, Suriconf uses the default configuration from the Suricata configuration file.

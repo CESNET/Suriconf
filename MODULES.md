@@ -89,7 +89,7 @@ During the preconfiguration run, Suricata workers use logical cores that are spe
 
 The module calculates the packet drop rate using the formula:
 ```
-drop_rate = capture.kernel_drops / (capture.kernel_packets + capture.kernel_drops) * 100.
+drop_rate = capture.kernel_drops / (capture.kernel_packets + capture.kernel_drops) * 100
 ```
 If the drop rate exceeds 1%, the configuration is marked as unsuccessful.
 
@@ -125,9 +125,9 @@ Suriconf configures these sections:
 **Warning counters**
 
 The module monitors the following counters:
-- `ippair_memuse` / `ippair_memcap` / `host_memuse` / `host_memcap` – warns when `memuse / memcap ≥ 0.95` (memory usage reaches 95% of configured memcap).
-- `defrag_max_frags_reached` / `defrag_max_trackers_reached` / `defrag_tracker_hard_reuse` – configuration fails if non-zero (insufficient defragmentation memory).
-- `tcp_ssn_memcap_drop` / `tcp_segment_memcap_drop` – configuration fails if non-zero (insufficient stream/reassembly memory).
+- `ippair_memuse`, `ippair_memcap`, `host_memuse`, `host_memcap` – warns when `memuse / memcap ≥ 0.95` (memory usage reaches 95% of configured memcap).
+- `defrag_max_frags_reached`, `defrag_max_trackers_reached`, `defrag_tracker_hard_reuse` – configuration fails if non-zero (insufficient defragmentation memory).
+- `tcp_ssn_memcap_drop`, `tcp_segment_memcap_drop` – configuration fails if non-zero (insufficient stream/reassembly memory).
 - `tcp_reassembly_gap` – warning if non-zero (TCP stream gaps detected).
 - `tcp_pkt_on_wrong_thread` – warning if non-zero (poor load balancing across threads).
 
@@ -144,7 +144,7 @@ These values are rounded up to the next higher power of two, ensuring an efficie
 **Prealloc (IPpair, host, defragmentation)**
 
 Preallocated objects depend on the maximum number of active objects:
-- **IPpair / host** – `ippair_active` / `host_active` → prealloc = max_active / 2.
+- **IPpair, host** – `ippair_active`,  `host_active` → prealloc = max_active / 2.
 - **defragmentation** – `defrag_tracker_active` → prealloc = max_active / 2.
 - `max-frags` – calculated as `defrag_tracker_active` × `defrag_max_fragments`.
 
