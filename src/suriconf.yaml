@@ -9,6 +9,7 @@ ethtool-bin: /usr/bin/ethtool
 ifconfig-bin: /usr/sbin/ifconfig
 ip-bin: /usr/sbin/ip
 log-dir: /var/log/suricata/
+socket: /var/run/suricata.pid
 preconf-time: 360 # in seconds
 # 360 is minimum for flow_threads module
 analysis: static # static/dynamic 
