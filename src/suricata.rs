@@ -6,6 +6,8 @@ SPDX-License-Identifier: BSD-3-Clause
 This file executes Suricata.
 */
 
+const PIDFILE: &str = "/var/run/suriconf_suricata.pid"; 
+
 use std::process::{Child, Command};
 use crate::yaml::{emergency_check_memcap, Suriconf};
 use crate::{FLOW_WINDOW, MIN_RUN};
@@ -16,10 +18,11 @@ use std::time::Duration;
 use crossbeam_channel::{bounded, select, tick, Receiver};
 use std::process::Stdio;
 use std::io::{BufRead, BufReader};
-use std::thread;
-use procfs::process::{all_processes, Process};
+use std::{fs, thread};
+use procfs::process::{Process};
 use signal_hook::consts::SIGINT;
 use signal_hook::iterator::Signals;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -35,6 +38,14 @@ pub fn execute_suricata<'a>(suriconf: &Suriconf, logs: &mut CreatedLogs, options
     let mut suricata_again = SuricataAgain::default();
 
     let mut vec_of_sur_cmd: Vec<String> = vec![];
+    match delete_pid_file() {
+        Err(e) => {
+            panic!("{e}");
+        }
+        Ok(()) => {}
+    };
+
+    set_pid_file(&mut vec_of_sur_cmd);
     get_capture_mode(suriconf, &mut vec_of_sur_cmd);
 
     if cfg!(target_os = "windows") {
@@ -66,7 +77,7 @@ pub fn execute_suricata<'a>(suriconf: &Suriconf, logs: &mut CreatedLogs, options
         let mut child = Command::new("sudo")
         .arg("-n")
         .args(args)
-        .stdout(Stdio::piped())
+        .stdout(Stdio::null())
         .stderr(Stdio::piped())
         .spawn()
         .expect("Failed to execute process.");
@@ -80,6 +91,14 @@ pub fn execute_suricata<'a>(suriconf: &Suriconf, logs: &mut CreatedLogs, options
                 }
             }
         });
+
+        let suri_pid = match wait_on_suricata_start(&suriconf.socket, &mut child) {
+            Ok(pid) => pid,
+            Err(e) => {
+                kill_suricata(&mut child);
+                panic!("{e}")
+            }
+        };
 
         let timeout = Duration::from_secs(suriconf.preconf_time);
         let start = std::time::Instant::now();
@@ -140,7 +159,6 @@ pub fn execute_suricata<'a>(suriconf: &Suriconf, logs: &mut CreatedLogs, options
 
         let ticks = tick(Duration::from_millis(100));
         let emergency_ticks = tick(Duration::from_secs(FLOW_WINDOW));
-        let suri_pid = check_process_name_for_suricata_main().expect("Unable to get Suricata-Main.");
 
         loop {
             select! {
@@ -196,6 +214,26 @@ pub fn get_capture_mode(suriconf: &Suriconf, vec_of_sur_cmd: &mut Vec<String>) {
             CaptureMode::AF_PACKET => {format!("--af-packet={}", suriconf.interface)},
             CaptureMode::DPDK => {panic!("NOT IMPLEMENTED")}
         });
+}
+
+pub fn delete_pid_file() -> std::io::Result<()> {
+    let status = Command::new("sudo")
+        .arg("-n")
+        .arg("rm")
+        .arg("-f")
+        .arg(PIDFILE)
+        .status()?;
+
+    if status.success() {
+        Ok(())
+    } else {
+        Err(std::io::Error::other("Failed to delete Suricata PID file."))
+    }
+}
+
+pub fn set_pid_file(vec_of_sur_cmd: &mut Vec<String>) {
+    vec_of_sur_cmd.push("--pidfile".to_string());
+    vec_of_sur_cmd.push(PIDFILE.to_string());
 }
 
 pub fn get_cpu_usage(sys: &mut SystemVar) {
@@ -272,24 +310,53 @@ pub fn get_workers(sys: &mut SystemVar) -> u64 {
     }
     workers
 }
-
-fn check_process_name_for_suricata_main() -> Option<i32> {
-    for _ in 0..10 {
-        for prc in all_processes().expect("Unable to get all processes.") {
-            let process: Process;
-            match  prc {
-                Ok(prc) => {process = prc}
-                Err(_) => {continue}
-            }
-
-            if process.stat().expect("Unable to find stats about process.").comm == "Suricata-Main" {
-                return Some(process.pid);
+fn get_suricata_pid() -> Result<i32, String> {
+    for _ in 0..20 {
+        if let Ok(content) = fs::read_to_string(PIDFILE) {
+            if let Ok(pid) = content.trim().parse::<i32>() {
+                if let Ok(comm) = fs::read_to_string(format!("/proc/{}/comm", pid)) {
+                    if comm.trim() == "Suricata-Main" {
+                     return Ok(pid);
+                    }
+                }
             }
         }
-        thread::sleep(Duration::from_millis(100));
+        thread::sleep(Duration::from_millis(1000));
     }
-    None
+    Err("Suricata process not found.".into())
 }
+fn wait_on_suricata_start(socket: &PathBuf, child: &mut Child) -> Result<i32, String> {
+    match get_suricata_pid() {
+        Ok(pid) => {
+            let socket = socket.to_str().ok_or("Socket path is not valid UTF-8.")?;
+            for _ in 0..120 {
+                let output = Command::new("sudo")
+                    .arg("-n")
+                    .arg("suricatasc")
+                    .arg("-c")
+                    .arg("uptime")
+                    .arg(socket)
+                    .output()
+                    .map_err(|e| format!("Unable to execute Suricata socket control tool: {e}"))?;
+
+                if output.status.success() {
+                    return Ok(pid)
+                }
+
+                if let Some(status) = child.try_wait().expect("Unable to get Suricata status.") {
+                    return Err(format!("Suricata exited during startup with status: {status}."));
+                 }
+
+                thread::sleep(Duration::from_millis(1000));
+            }
+            Err("Suricata could not start.".into())
+        }
+        Err(e) => {
+            Err(e)
+        }
+    }
+}
+
 fn get_cores_with_threads(suri_pid: i32, sys: &mut SystemVar) {
     let proc = Process::new(suri_pid).expect("Unable to create process.");
     let tasks = proc.tasks().expect("Unable to get process tasks.");
@@ -330,6 +397,7 @@ pub fn kill_suricata(child: &mut Child) {
                 .arg("Suricata-Main")
                 .status()
                 .expect("Unable to pkill Suricata-Main (SIGKILL).");
+
             if !output.success() {
                 panic!("Process failed.");
             }
