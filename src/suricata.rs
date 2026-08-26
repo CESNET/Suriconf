@@ -16,10 +16,11 @@ use std::time::Duration;
 use crossbeam_channel::{bounded, select, tick, Receiver};
 use std::process::Stdio;
 use std::io::{BufRead, BufReader};
-use std::thread;
-use procfs::process::{all_processes, Process};
+use std::{fs, thread};
+use procfs::process::{Process};
 use signal_hook::consts::SIGINT;
 use signal_hook::iterator::Signals;
+use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -35,6 +36,7 @@ pub fn execute_suricata<'a>(suriconf: &Suriconf, logs: &mut CreatedLogs, options
     let mut suricata_again = SuricataAgain::default();
 
     let mut vec_of_sur_cmd: Vec<String> = vec![];
+    vec_of_sur_cmd.push("--pidfile".to_string());
     get_capture_mode(suriconf, &mut vec_of_sur_cmd);
 
     if cfg!(target_os = "windows") {
@@ -70,6 +72,13 @@ pub fn execute_suricata<'a>(suriconf: &Suriconf, logs: &mut CreatedLogs, options
         .stderr(Stdio::piped())
         .spawn()
         .expect("Failed to execute process.");
+
+        let suri_pid = match wait_on_suricata_start() {
+            Ok(pid) => pid,
+            Err(e) => {
+                panic!("{e}")
+            }
+        };
 
         let stderr = child.stderr.take().expect("Failed to open stderr");
         thread::spawn(move || {
@@ -140,7 +149,6 @@ pub fn execute_suricata<'a>(suriconf: &Suriconf, logs: &mut CreatedLogs, options
 
         let ticks = tick(Duration::from_millis(100));
         let emergency_ticks = tick(Duration::from_secs(FLOW_WINDOW));
-        let suri_pid = check_process_name_for_suricata_main().expect("Unable to get Suricata-Main.");
 
         loop {
             select! {
@@ -272,24 +280,43 @@ pub fn get_workers(sys: &mut SystemVar) -> u64 {
     }
     workers
 }
-
-fn check_process_name_for_suricata_main() -> Option<i32> {
+fn get_suricata_pid() -> Result<i32, String> {
     for _ in 0..10 {
-        for prc in all_processes().expect("Unable to get all processes.") {
-            let process: Process;
-            match  prc {
-                Ok(prc) => {process = prc}
-                Err(_) => {continue}
-            }
-
-            if process.stat().expect("Unable to find stats about process.").comm == "Suricata-Main" {
-                return Some(process.pid);
+        if let Ok(content) = fs::read_to_string("/var/run/suricata.pid") {
+            if let Ok(pid) = content.trim().parse::<i32>() {
+                if Path::new(&format!("/proc/{}", pid)).exists() {
+                    return Ok(pid);
+                }
             }
         }
         thread::sleep(Duration::from_millis(100));
     }
-    None
+    Err("Suricata process not found.".into())
 }
+fn wait_on_suricata_start() -> Result<i32, String> {
+    match get_suricata_pid() {
+        Ok(pid) => {
+            for _ in 0..100 {
+                let output = Command::new("sudo")
+                    .arg("suricatasc")
+                    .arg("-c")
+                    .arg("uptime")
+                    .status()
+                    .expect("Unable to execute Suricata socket control tool.");
+
+                if output.success() {
+                    return Ok(pid)
+                }
+                thread::sleep(Duration::from_millis(100));
+            }
+            Err("Suricata could not start.".into())
+        }
+        Err(e) => {
+            Err(e)
+        }
+    }
+}
+
 fn get_cores_with_threads(suri_pid: i32, sys: &mut SystemVar) {
     let proc = Process::new(suri_pid).expect("Unable to create process.");
     let tasks = proc.tasks().expect("Unable to get process tasks.");
