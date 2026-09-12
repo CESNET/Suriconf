@@ -726,6 +726,7 @@ pub struct Suriconf {
     pub ifconfig_bin: PathBuf,
     pub ip_bin: PathBuf,
     pub log_dir: PathBuf,
+    pub socket: PathBuf,
     pub preconf_time: u64,
     pub analysis: Analysis,
     pub mode: Mode,
@@ -844,6 +845,13 @@ impl Suriconf {
             self.find_log_dir(suriconf_string).expect("Unable to parse path to logs.")
         };
 
+        self.socket = if let Some(Commands::Suricata { path_to_socket: Some(p), .. }) = &args.cmd {
+            p.clone()
+        }
+        else {
+            self.find_socket(suriconf_string).expect("Unable to parse path to unix socket.")
+        };
+
         self.preconf_time = if let Some( Commands::Suricata { preconf_time: Some(p), .. }) = &args.cmd {
         p.clone()
         }
@@ -950,6 +958,10 @@ impl Suriconf {
 
     pub fn find_log_dir(&self, text: &Value) -> Option<PathBuf> {
         text.get("log-dir").and_then(|c| c.as_str()).map(|c| PathBuf::from(c))
+    }
+
+    pub fn find_socket(&self, text: &Value) -> Option<PathBuf> {
+        text.get("socket").and_then(|c| c.as_str()).map(|c| PathBuf::from(c))
     }
 
     pub fn find_preconf_time(&self, text: &Value) -> Option<u64> {

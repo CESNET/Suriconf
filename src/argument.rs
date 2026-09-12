@@ -68,6 +68,10 @@ pub enum Commands {
         #[clap(short='l', long)]
         path_to_logs: Option<PathBuf>,
 
+        // Change path to Unix Socket
+        #[clap(short='s', long)]
+        path_to_socket: Option<PathBuf>,
+
         /// Change the time of Suricata preconfiguration run (in seconds)
         #[clap(short='t', long="time")]
         preconf_time: Option<u64>,
