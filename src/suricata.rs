@@ -46,6 +46,7 @@ pub fn execute_suricata<'a>(suriconf: &Suriconf, logs: &mut CreatedLogs, options
     };
 
     set_pid_file(&mut vec_of_sur_cmd);
+    set_log_dir(suriconf, &mut vec_of_sur_cmd);
     get_capture_mode(suriconf, &mut vec_of_sur_cmd);
 
     if cfg!(target_os = "windows") {
@@ -214,6 +215,11 @@ pub fn get_capture_mode(suriconf: &Suriconf, vec_of_sur_cmd: &mut Vec<String>) {
             CaptureMode::AF_PACKET => {format!("--af-packet={}", suriconf.interface)},
             CaptureMode::DPDK => {panic!("NOT IMPLEMENTED")}
         });
+}
+
+pub fn set_log_dir(suriconf: &Suriconf, vec_of_sur_cmd: &mut Vec<String>) {
+    vec_of_sur_cmd.push("-l".to_string());
+    vec_of_sur_cmd.push(suriconf.log_dir.display().to_string());
 }
 
 pub fn delete_pid_file() -> std::io::Result<()> {
