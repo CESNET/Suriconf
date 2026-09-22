@@ -35,7 +35,6 @@ impl Module for CpuAffinityModule {
             Keys::interface,
             Keys::capture_mode,
             Keys::ethtool,
-            Keys::ifconfig,
             Keys::capture_kernel_drops,
             Keys::capture_kernel_packets,
             Keys::capture_errors,
@@ -44,9 +43,9 @@ impl Module for CpuAffinityModule {
             Keys::ethtool_stat,
             Keys::flow_managers,
             Keys::flow_recyclers,
-            Keys::ifconfig,
             Keys::af_packet_interface_threads,
-            Keys::datetime
+            Keys::datetime,
+            Keys::ip
         ];
 
         let questions: HashMap<Keys, Value> =
@@ -350,6 +349,10 @@ impl CpuAffinityModule {
         answers.iter().find(|h| h.key == &Keys::ethtool).and_then(|h| h.value.as_str()).expect("Ethtool cannot be found.")
     }
 
+    fn get_ip_stat<'a>(&self, answers: &Vec<Answer<'a>>) -> &'a str  {
+        answers.iter().find(|h| h.key == &Keys::ip).and_then(|h| h.value.as_str()).expect("Ip cannot be found.")
+    }
+
     fn get_datetime_stat(&self, answers: &Vec<Answer<'_>>) -> DateTime<Utc> {
         answers.iter().find(|h| h.key == &Keys::datetime)
             .and_then(|h| h.value.as_str()).and_then(|v| DateTime::parse_from_rfc3339(v).ok())
@@ -532,9 +535,9 @@ impl CpuAffinityModule {
     fn module_af_packet_tuning(&self, answers: &Vec<Answer<'_>>, nic_file: &mut File) {
         let interface = self.get_interface_stat(answers);
         let ethtool =  self.get_ethtool_stat(answers);
-        let ifconfig = answers.iter().find(|h| h.key == &Keys::ifconfig).and_then(|h| h.value.as_str()).expect("Ifconfig cannot be found.");
+        let ip = self.get_ip_stat(answers);
         let wrk_cpu_set_len = self.get_wrk_cpu_set().len() as u64;
-        yaml::af_packet_tuning(interface, wrk_cpu_set_len, ethtool, ifconfig, nic_file);
+        yaml::af_packet_tuning(interface, wrk_cpu_set_len, ethtool, ip, nic_file);
     }
 
     fn module_set_rss(&self, answers: &Vec<Answer<'_>>, nic_file: &mut File) {

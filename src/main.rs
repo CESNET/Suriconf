@@ -69,13 +69,6 @@ fn main() {
         Ok(()) => {}
     }
 
-    match suriconf.find_ifconfig_executable_file() {
-        Err(e) => {
-            panic!("{}", e);
-        }
-        Ok(()) => {}
-    }
-
     match suriconf.find_ip_executable_file() {
         Err(e) => {
             panic!("{}", e);
