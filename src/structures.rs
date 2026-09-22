@@ -262,7 +262,6 @@ pub enum Keys { // JUST FOR FLOW
     decoder_pkts,
     decoder_invalid,
     ethtool,
-    ifconfig,
     ip,
     ethtool_stat,
     af_packet_interface_threads
@@ -367,7 +366,6 @@ impl Keys {
             "decoder_pkts" => Keys::decoder_pkts,
             "decoder_invalid" => Keys::decoder_invalid,
             "ethtool" => Keys::ethtool,
-            "ifconfig" => Keys::ifconfig,
             "ip" => Keys::ip,
             "ethtool_stat" => Keys::ethtool_stat,
             "af_packet_interface_threads" => Keys::af_packet_interface_threads,

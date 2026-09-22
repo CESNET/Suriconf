@@ -15,9 +15,6 @@
     "ethtool" : {
       "path_to_value": "/ethtool-bin"
     },
-    "ifconfig" : {
-      "path_to_value": "/ifconfig-bin"
-    },
     "ip" :{
       "path_to_value": "/ip-bin"
 

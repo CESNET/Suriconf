@@ -36,7 +36,6 @@ The following tools must be installed, and their paths must be accessible and sp
 |------|---------|
 | Suricata | 9.0.0-dev (d030a9c4e 2026-04-01) |
 | ethtool | 5.13 |
-| ifconfig | net-tools 2.10-alpha |
 | ip | iproute2-6.8.0, libbpf 0.5.0 |
 
 ## Configuration

@@ -56,10 +56,6 @@ pub enum Commands {
         #[clap(short='e', long)]
         ethtool_bin: Option<PathBuf>,
 
-        /// Ifconfig path to bin
-        #[clap(short='i', long)]
-        ifconfig_bin: Option<PathBuf>,
-
         /// IP path to bin
         #[clap(short='p', long)]
         ip_bin: Option<PathBuf>,

@@ -365,7 +365,7 @@ fn run_command_and_write_it_down(cmd: &str, args: &[&str], nic_file: &mut File) 
     output
 }
 
-pub fn af_packet_tuning(interface: &str, threads: u64, ethtool: &str, ifconfig: &str, nic_file: &mut File) {
+pub fn af_packet_tuning(interface: &str, threads: u64, ethtool: &str, ip: &str, nic_file: &mut File) {
     run_command_and_write_it_down("sudo", &["sysctl", "-w", "net.core.rmem_max=268435456"], nic_file);
     run_command_and_write_it_down("sudo", &["sysctl", "-w", "net.core.netdev_max_backlog=16384"], nic_file);
 
@@ -393,7 +393,7 @@ pub fn af_packet_tuning(interface: &str, threads: u64, ethtool: &str, ifconfig: 
         None => { panic!("Unable to get  driver.")}
     };
 
-    run_command_and_write_it_down("sudo", &[format!("{ifconfig}").as_str(), format!("{interface}").as_str(), "down"], nic_file);
+    run_command_and_write_it_down("sudo", &[format!("{ip}").as_str(), "link", "set", format!("{interface}").as_str(), "down"], nic_file);
     run_command_and_write_it_down("sudo", &[format!("{ethtool}").as_str(), "-X", format!("{interface}").as_str(), "default"], nic_file);
     run_command_and_write_it_down("sudo", &[format!("{ethtool}").as_str(), "-L", interface, "combined", &threads.to_string()], nic_file);
     run_command_and_write_it_down("sudo", &[format!("{ethtool}").as_str(), "-K", interface, "rxhash", "on"], nic_file);
@@ -403,7 +403,7 @@ pub fn af_packet_tuning(interface: &str, threads: u64, ethtool: &str, ifconfig: 
 
     }
 
-    run_command_and_write_it_down("sudo", &[format!("{ifconfig}").as_str(), format!("{interface}").as_str(), "up"], nic_file);
+    run_command_and_write_it_down("sudo", &[format!("{ip}").as_str(), "link", "set", format!("{interface}").as_str(), "up"], nic_file);
 
     output = run_command_and_write_it_down("sudo", &[format!("{ethtool}").as_str(), "-x" ,format!("{interface}").as_str()], nic_file);
 
@@ -565,8 +565,8 @@ pub fn set_interface_with_threads(suricata_string: &mut Value, suriconf: &Surico
                 if shrink != 0 { // remove cpus to match RSS queues
                  cpus.drain(0..shrink as usize);
                 };
-                let ifconfig = suriconf.ifconfig_bin.to_str().expect("Unable to transform path to Ifconfig to str.");
-                af_packet_tuning(&suriconf.interface, cpus.len() as u64, ethtool, ifconfig, &mut nic_file);
+                let ip = suriconf.ip_bin.to_str().expect("Unable to transform path to Ip to str.");
+                af_packet_tuning(&suriconf.interface, cpus.len() as u64, ethtool, ip, &mut nic_file);
                 set_hard_irq(&suriconf.interface, &cpus, &mut nic_file);
             }
 
@@ -723,7 +723,6 @@ pub struct Suriconf {
     pub suri_configuration: PathBuf,
     pub suricata_bin: PathBuf,
     pub ethtool_bin: PathBuf,
-    pub ifconfig_bin: PathBuf,
     pub ip_bin: PathBuf,
     pub log_dir: PathBuf,
     pub socket: PathBuf,
@@ -751,14 +750,6 @@ impl Suriconf {
             Ok(())
         } else {
             Err(String::from("Unable to parse path to Ethtool or Ethtool is not executable."))
-        }
-    }
-
-    pub fn find_ifconfig_executable_file(&self) -> Result<(), String> {
-        if self.ifconfig_bin.is_executable() {
-            Ok(())
-        } else {
-            Err(String::from("Unable to parse path to Ifconfig or Ifconfig is not executable."))
         }
     }
 
@@ -822,13 +813,6 @@ impl Suriconf {
         }
         else {
             self.find_ethtool_bin(suriconf_string).expect("Unable to parse path to Ethtool binary file.")
-        };
-
-        self.ifconfig_bin = if let Some(Commands::Suricata {ifconfig_bin: Some(p), ..}) = &args.cmd  {
-            p.clone()
-        }
-        else {
-            self.find_ifconfig_bin(suriconf_string).expect("Unable to parse path to Ifconfig binary file.")
         };
 
         self.ip_bin = if let Some(Commands::Suricata {ip_bin: Some(p), ..}) = &args.cmd  {
@@ -946,10 +930,6 @@ impl Suriconf {
 
     pub fn find_ethtool_bin(&self, text: &Value) -> Option<PathBuf> {
         text.get("ethtool-bin").and_then(|c| c.as_str()).map(|c| PathBuf::from(c))
-    }
-
-    pub fn find_ifconfig_bin(&self, text: &Value) -> Option<PathBuf> {
-        text.get("ifconfig-bin").and_then(|c| c.as_str()).map(|c| PathBuf::from(c))
     }
 
     pub fn find_ip_bin(&self, text: &Value) -> Option<PathBuf> {
