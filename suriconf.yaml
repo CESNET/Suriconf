@@ -1,11 +1,11 @@
 %YAML 1.1
 ---
 
-suriconf-version: 1.0-dev
+suriconf-version: 1.0.2-dev
 
 suri-configuration: suricata.yaml
 suricata-bin: /usr/bin/suricata
-ethtool-bin: /usr/bin/ethtool
+ethtool-bin: /usr/sbin/ethtool
 ip-bin: /usr/sbin/ip
 log-dir: /var/log/suricata/
 socket: /var/run/suricata/suricata-command.socket
@@ -34,7 +34,7 @@ modules:
     enabled: true
 
 variables:
-  interface: wlan0
+  interface: eth0
   capture_mode: af_packet # dpdk
   max_memory_usage: 1 GiB
   max_cpu_usage_vec: [0, 1, 2, 3, 4, 5, 6]
