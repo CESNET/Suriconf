@@ -4,7 +4,7 @@
 [![Rust](https://img.shields.io/badge/rust-1.88+-orange.svg)](https://rustup.rs/)
 [![Bachelor's Thesis](https://img.shields.io/badge/thesis-completed-success)](https://www.vut.cz/studenti/zav-prace/detail/170986)
 
-Suriconf is an automated configuration assistant for [Suricata](https://github.com/OISF/suricata). It analyzes network traffic and system resources to optimize Suricata's configuration through a modular approach. Each module uses mathematical methods and performance metrics to configure specific Suricata components. Testing showed Suriconf v1.0.0-dev successfully configured Suricata in 80.8% of test cases with [rules](https://community.emergingthreats.net/).
+Suriconf is an automated configuration assistant for [Suricata](https://github.com/OISF/suricata). It analyzes network traffic and system resources to optimize Suricata's configuration through a modular approach. Each module uses mathematical methods and performance metrics to configure specific Suricata components. Testing showed Suriconf v1.0.1-dev successfully configured Suricata in 80.8% of test cases with [rules](https://community.emergingthreats.net/).
 
 ## Contents
 
@@ -43,14 +43,14 @@ The following tools must be installed, and their paths must be accessible and sp
 
 ### System 
 
-Suriconf v1.0.0-dev requires the network interface to be bound to a specific NUMA node. 
+Suriconf v1.0.1-dev requires the network interface to be bound to a specific NUMA node. 
 
 ### Suricata configuration file
 
 > [!WARNING]
 > Consider stream and reassembly memcap in Suricata configuration file. (host and IPpair memcap).
 
-Configure these with high values first. Suriconf will automatically reduce them if needed. This is necessary because Suriconf v1.0.0-dev currently lacks dynamic memory reallocation between these pools. Once allocated, memory assigned to one memcap cannot be reassigned to another at runtime.
+Configure these with high values first. Suriconf will automatically reduce them if needed. This is necessary because Suriconf v1.0.1-dev currently lacks dynamic memory reallocation between these pools. Once allocated, memory assigned to one memcap cannot be reassigned to another at runtime.
 
 ## Configuration
 
@@ -69,8 +69,8 @@ The entire configuration is defined in a YAML file, typically named `suriconf.ya
 
 > [!WARNING]
 > - Flow threads module requires minimum 6 minutes (`preconf-time`).
-> - Version 1.0.0-dev supports only `static` analysis.
-> - Version 1.0.0-dev supports only `modify` mode with `yaml_change: force`.
+> - Version 1.0.1-dev supports only `static` analysis.
+> - Version 1.0.1-dev supports only `modify` mode with `yaml_change: force`.
 
 
 ### Modules
@@ -110,6 +110,22 @@ Isolate cores 2-4 using `grubby`:
 ```bash
 sudo grubby --update-kernel=ALL --args="isolcpus=2-4" && sudo reboot
 ```
+
+## Crates.io
+
+Install Suriconf: 
+
+```bash
+cargo install suriconf@1.0.1-dev 
+```
+
+Execute Suriconf:
+
+```bash
+suriconf -h
+```
+
+## Github  
 
 Use the Cargo package manager to run the project in `src` directory:
 
