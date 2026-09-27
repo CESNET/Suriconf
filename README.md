@@ -37,7 +37,7 @@ The following tools must be installed, and their paths must be accessible and sp
 
 | Tool | Version |
 |------|---------|
-| Suricata | 9.0.0-dev (d030a9c4e 2026-04-01) |
+| Suricata | 9.0.0-dev (746bb48 2026-09-27), https://github.com/KEIAHNY/suricata/tree/ippair-host-defrag-reassembly-counters-feature-8438-v1  |
 | ethtool | 5.13 |
 | ip | iproute2-6.8.0, libbpf 0.5.0 |
 
