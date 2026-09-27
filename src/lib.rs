@@ -69,7 +69,7 @@ static DEFAULT_PACKET_SIZE: DefaultPacketSize = DefaultPacketSize::Average;
 
 static CPU_USAGE_MAX: f32 = 95.0;
 
-static CPU_USAGE: f64 = 50.0;
+static CPU_USAGE: f64 = 60.0;
 static HUBER_THRESHOLD: f64 = 0.0;
 static MANAGER_SLOPE: f64 = 0.1; // once every 10 s
 static PANIC_THRESHOLD: u64 = 100;
