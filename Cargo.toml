@@ -1,7 +1,15 @@
 [package]
 name = "suriconf"
-version = "0.1.0"
 edition = "2024"
+version = "1.0.0-dev"
+authors = ["Eliška Červinková <eliska.cervinkova@cesnet.cz>"]
+license = "BSD-3-Clause"
+description = "A tool for automating Suricata setup and configuration."
+readme = "README.md"
+homepage = "https://github.com/CESNET/Suriconf"
+repository = "https://github.com/CESNET/Suriconf"
+keywords = ["cli", "configuration", "suricata", "suriconf"]
+categories = ["command-line-utilities"]
 
 [dependencies]
 clap = { version = "4.5.48", features = ["derive", "env"] }
@@ -11,7 +19,6 @@ is_executable = "1.0.5"
 crossbeam-channel = "0.5.15"
 anyhow = "1.0.100"
 signal-hook = "0.3.18"
-rustc-std-workspace-std = "1.0.1"
 chrono = "0.4.42"
 serde = { version = "1.0.228", features = ["derive"] }
 strum = "0.27.2"
