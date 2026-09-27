@@ -862,7 +862,7 @@ impl Suriconf {
         };
 
         self.max_cpu_usage_vec = if let Some(Commands::Var { max_cpu_usage_vec: Some(max_cpu_usage_vec), .. }) = &args.cmd {
-            max_cpu_usage_vec.clone()
+            parse_cpu_list(&max_cpu_usage_vec).expect("Unable to parse max cpu usage vector.")
         }  else {
             self.find_max_cpu_usage_vec(suriconf_string).expect("Unable to parse max cpu usage vector.")
         };
@@ -985,21 +985,28 @@ impl Suriconf {
         byte
     }
 
-    pub fn find_max_cpu_usage_vec(&self, text: &Value)  -> Option<Vec<u64>>{
-        let mut vec_cpus: Vec<u64> = Vec::new();
-        match text.get("variables")
+    pub fn find_max_cpu_usage_vec(&self, text: &Value) -> Option<Vec<u64>> {
+        let seq = text
+            .get("variables")
             .and_then(|c| c.get("max_cpu_usage_vec"))
-            .and_then(|v| v.as_sequence()) {
-            Some(vec_cpus_value ) => {
-                for cpu in vec_cpus_value {
-                     vec_cpus.push(cpu.as_u64().expect("Unable to convert cpu_set to vector."))
-                }
-            },
-            None => {return None}
+            .and_then(|v| v.as_sequence())?;
+
+        let mut vec_cpus: Vec<u64> = Vec::new();
+
+        for item in seq {
+            let s = match item {
+                Value::Number(n) => n.to_string(),
+                Value::String(s) => s.clone(),
+                _ => return None,
+            };
+            vec_cpus.extend(expand_cpu_range(&s)?);
         }
+
         Some(vec_cpus)
     }
+
 }
+
 pub fn fix_interface_cpu_set(suricata_string: &mut Value)  {
         let interface_spec_cpu_sets  = suricata_string.get_mut("threading").expect("Unable to get threading.").get_mut("cpu-affinity").expect("Unable to get cpu-affinity.")
             .get_mut("worker-cpu-set").expect("Unable to get worker-cpu-set.").get_mut("interface-specific-cpu-set").expect("").as_sequence_mut().expect("Unable to get interface-specific-cpu-set.");
@@ -1030,4 +1037,24 @@ pub fn fix_interface_cpu_set(suricata_string: &mut Value)  {
                     *map = new_map;
                 }
             }
+}
+
+fn parse_cpu_list(items: &[String]) -> Option<Vec<u64>> {
+    let mut cpus = Vec::new();
+    for item in items {
+        cpus.extend(expand_cpu_range(item)?);
+    }
+    Some(cpus)
+}
+
+fn expand_cpu_range(s: &str) -> Option<Vec<u64>> {
+    let s = s.trim();
+    match s.split_once('-') {
+        Some((start, end)) => {
+            let start: u64 = start.trim().parse().ok()?;
+            let end: u64 = end.trim().parse().ok()?;
+            (start <= end).then(|| (start..=end).collect())
+        }
+        None => Some(vec![s.parse().ok()?]),
+    }
 }

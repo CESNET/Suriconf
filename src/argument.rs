@@ -93,7 +93,7 @@ pub enum Commands {
 
         /// Change max cpu usage
         #[clap(short='C', long="cpu", value_delimiter = ' ', num_args = 1..)]
-        max_cpu_usage_vec: Option<Vec<u64>>,
+        max_cpu_usage_vec: Option<Vec<String>>,
     },
 
     /// Change directory for generated Suriconf configuration file
