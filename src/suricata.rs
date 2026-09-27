@@ -25,6 +25,7 @@ use signal_hook::iterator::Signals;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::io;
 
 pub fn execute_suricata<'a>(suriconf: &Suriconf, logs: &mut CreatedLogs, options: &Vec<String>) -> Option<(SystemVar, SuricataAgain)> {
     let sys = Arc::new(Mutex::new(SystemVar::default()));
@@ -222,7 +223,7 @@ pub fn set_log_dir(suriconf: &Suriconf, vec_of_sur_cmd: &mut Vec<String>) {
     vec_of_sur_cmd.push(suriconf.log_dir.display().to_string());
 }
 
-pub fn delete_pid_file() -> std::io::Result<()> {
+pub fn delete_pid_file() -> io::Result<()> {
     let status = Command::new("sudo")
         .arg("-n")
         .arg("rm")

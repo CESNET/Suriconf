@@ -19,6 +19,7 @@ use is_executable::IsExecutable;
 use std::fs;
 use std::process::{Command, Output};
 use crate::{yaml, MANAGER_START, PACKET, RECYCLER_START};
+use std::collections::{HashSet};
 
 pub fn open_yaml(file: &PathBuf) -> Result<Value, Box<dyn std::error::Error>> {
     let file = File::open(file)?;
@@ -861,11 +862,17 @@ impl Suriconf {
             self.find_max_memory_usage(suriconf_string).expect("Unable to parse max memory usage.")
         };
 
-        self.max_cpu_usage_vec = if let Some(Commands::Var { max_cpu_usage_vec: Some(max_cpu_usage_vec), .. }) = &args.cmd {
-            max_cpu_usage_vec.clone()
+        let result = if let Some(Commands::Var { max_cpu_usage_vec: Some(max_cpu_usage_vec), .. }) = &args.cmd {
+            parse_cpu_list(&max_cpu_usage_vec)
         }  else {
-            self.find_max_cpu_usage_vec(suriconf_string).expect("Unable to parse max cpu usage vector.")
+            self.find_max_cpu_usage_vec(suriconf_string)
         };
+
+        self.max_cpu_usage_vec = match result {
+            Ok(cpus) => cpus,
+            Err(msg) => panic!("Unable to parse max cpu usage vector: {msg}"),
+        }; 
+
     }
     pub fn find_suri_configuration(&self, text: &Value) -> Option<PathBuf> {
         text.get("suri-configuration")
@@ -985,21 +992,36 @@ impl Suriconf {
         byte
     }
 
-    pub fn find_max_cpu_usage_vec(&self, text: &Value)  -> Option<Vec<u64>>{
-        let mut vec_cpus: Vec<u64> = Vec::new();
-        match text.get("variables")
+    pub fn find_max_cpu_usage_vec(&self, text: &Value) -> Result<Vec<u64>, String> {
+        let seq = text
+            .get("variables")
             .and_then(|c| c.get("max_cpu_usage_vec"))
-            .and_then(|v| v.as_sequence()) {
-            Some(vec_cpus_value ) => {
-                for cpu in vec_cpus_value {
-                     vec_cpus.push(cpu.as_u64().expect("Unable to convert cpu_set to vector."))
+            .and_then(|v| v.as_sequence())
+            .ok_or_else(|| "Missing 'max_cpu_usage_vec' in Suriconf configuration".to_string())?;
+
+
+        let mut cpus: Vec<u64> = Vec::new();
+        let mut seen = HashSet::new();
+
+        for item in seq {
+            let s = match item {
+                Value::Number(n) => n.to_string(),
+                Value::String(s) => s.clone(),
+                u => return Err(format!("Invalid CPU {:?}.", u))
+
+            };
+
+            for cpu in expand_cpu_range(&s)? {
+                if seen.insert(cpu) {   
+                    cpus.push(cpu);
                 }
-            },
-            None => {return None}
+            }
+
         }
-        Some(vec_cpus)
+        Ok(cpus)        
     }
 }
+
 pub fn fix_interface_cpu_set(suricata_string: &mut Value)  {
         let interface_spec_cpu_sets  = suricata_string.get_mut("threading").expect("Unable to get threading.").get_mut("cpu-affinity").expect("Unable to get cpu-affinity.")
             .get_mut("worker-cpu-set").expect("Unable to get worker-cpu-set.").get_mut("interface-specific-cpu-set").expect("").as_sequence_mut().expect("Unable to get interface-specific-cpu-set.");
@@ -1030,4 +1052,45 @@ pub fn fix_interface_cpu_set(suricata_string: &mut Value)  {
                     *map = new_map;
                 }
             }
+}
+
+fn parse_cpu_list(items: &[String]) -> Result<Vec<u64>, String>  {
+    let mut cpus = Vec::new();
+    let mut seen = HashSet::new();
+    for item in items {
+        for cpu in expand_cpu_range(item)? {
+            if seen.insert(cpu) {   
+                cpus.push(cpu);
+            }
+        }
+    }
+    Ok(cpus)
+}
+
+fn expand_cpu_range(s: &str) -> Result<Vec<u64>, String>  {
+    let system_cpus = num_cpus::get();
+    let s = s.trim();
+    match s.split_once('-') {
+        Some((start, end)) => {
+            let start: u64 = start.trim().parse().map_err(|_| format!("Invalid CPU {}.", start))?;
+            let end: u64 = end.trim().parse().map_err(|_| format!("Invalid CPU {}.", end))?;
+            if start <= end {
+                if (end as usize) < system_cpus {
+                    Ok((start..=end).collect())
+                } else {
+                    Err(format!("CPU {} is not available.", end))
+                }
+            } else {
+                Err(format!("Invalid CPU range '{}-{}', start must not be greater than end.", start, end))
+            }
+        }
+        None => {
+            let cpu: u64 = s.parse().map_err(|_| format!("Invalid CPU {}.", s))?;
+            if (cpu as usize) < system_cpus {
+                Ok(vec![cpu])
+            } else {
+                Err(format!("CPU {} is not available.", cpu))
+            }
+        }
+    }
 }
