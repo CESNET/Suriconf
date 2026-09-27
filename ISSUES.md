@@ -34,9 +34,6 @@
 - Use shell-check for bash scripts, improve test automation.
 - Refactor logging using Rust crates.
 
-## Features
-- Specify logical cores as a range in suricata.yaml.
-
 ## Tests
 - Test Theil-Sen regression.
 - How do the Suricata parameters `default-packet-size` and `max-pending-packets` affect performance?
