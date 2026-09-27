@@ -27,6 +27,7 @@
 
 ## Future work
 - Add load factor for hash tables in memory module.
+- Reallocate memory when a memcap limit is reached - LP.
 
 ## Code quality
 - The recycler and manager use the same mechanism, resulting in duplicated code.

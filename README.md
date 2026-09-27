@@ -4,13 +4,16 @@
 [![Rust](https://img.shields.io/badge/rust-1.88+-orange.svg)](https://rustup.rs/)
 [![Bachelor's Thesis](https://img.shields.io/badge/thesis-completed-success)](https://www.vut.cz/studenti/zav-prace/detail/170986)
 
-Suriconf is an automated configuration assistant for [Suricata](https://github.com/OISF/suricata). It analyzes network traffic and system resources to optimize Suricata's configuration through a modular approach. Each module uses mathematical methods and performance metrics to configure specific Suricata components. Testing showed Suriconf v1.0-dev successfully configured Suricata in 80.8% of test cases with [rules](https://community.emergingthreats.net/).
+Suriconf is an automated configuration assistant for [Suricata](https://github.com/OISF/suricata). It analyzes network traffic and system resources to optimize Suricata's configuration through a modular approach. Each module uses mathematical methods and performance metrics to configure specific Suricata components. Testing showed Suriconf v1.0.0-dev successfully configured Suricata in 80.8% of test cases with [rules](https://community.emergingthreats.net/).
 
 ## Contents
 
 ---
   - [Prerequisites](#prerequisites)
     - [Rust toolchain](#rust-toolchain)
+    - [Required binaries](#required-binaries)
+    - [System](#system)
+    - [Suricata configuration file](#suricata-configuration-file)
   - [Configuration](#configuration)
     - [Configuration overview](#configuration-overview)
     - [Modules](#modules)
@@ -38,6 +41,17 @@ The following tools must be installed, and their paths must be accessible and sp
 | ethtool | 5.13 |
 | ip | iproute2-6.8.0, libbpf 0.5.0 |
 
+### System 
+
+Suriconf v1.0.0-dev requires the network interface to be bound to a specific NUMA node. 
+
+### Suricata configuration file
+
+> [!WARNING]
+> Consider stream and reassembly memcap in Suricata configuration file. (host and IPpair memcap).
+
+Configure these with high values first. Suriconf will automatically reduce them if needed. This is necessary because Suriconf v1.0.0-dev currently lacks dynamic memory reallocation between these pools. Once allocated, memory assigned to one memcap cannot be reassigned to another at runtime.
+
 ## Configuration
 
 ### Configuration overview
@@ -55,8 +69,8 @@ The entire configuration is defined in a YAML file, typically named `suriconf.ya
 
 > [!WARNING]
 > - Flow threads module requires minimum 6 minutes (`preconf-time`).
-> - Version 1.0-dev supports only `static` analysis.
-> - Version 1.0-dev supports only `modify` mode with `yaml_change: force`.
+> - Version 1.0.0-dev supports only `static` analysis.
+> - Version 1.0.0-dev supports only `modify` mode with `yaml_change: force`.
 
 
 ### Modules
@@ -68,6 +82,9 @@ The `modules` section defines all available modules. For a detailed description 
 
 > [!WARNING]
 > When disabling `cpu_affinity` module, you must define interface-specific CPU affinity section in default Suricata configuration file.
+
+> [!WARNING]
+> Using the `cpu_affinity` module, Suriconf supports only a single interface.
 
 ### Variables
 
