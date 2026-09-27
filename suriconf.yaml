@@ -1,7 +1,7 @@
 %YAML 1.1
 ---
 
-suriconf-version: 1.0.2-dev
+suriconf-version: 1.1.0-dev
 
 suri-configuration: suricata.yaml
 suricata-bin: /usr/bin/suricata
@@ -37,4 +37,4 @@ variables:
   interface: eth0
   capture_mode: af_packet # dpdk
   max_memory_usage: 1 GiB
-  max_cpu_usage_vec: [0, 1, 2, 3, 4, 5, 6]
+  max_cpu_usage_vec: [0, 1, 2, 3, 4, 5, 6] # [0-6]
