@@ -8,8 +8,10 @@ This file is a startpoint for Suriconf.
 
 use chrono::{DateTime, Utc};
 use clap::Parser;
+use std::process;
 use std::time::SystemTime;
-use suriconf::argument::Args;
+use suriconf::argument::{Args, Commands};
+use suriconf::config_gen::init;
 use suriconf::json::Preconfiguration;
 use suriconf::query::Resources;
 use suriconf::structures::{CreatedLogs, JsonVar, SuricataAgain};
@@ -20,6 +22,13 @@ use suriconf::yaml::Suriconf;
 #[allow(unused_variables)]
 fn main() {
     let args = Args::parse();
+
+    if let Some(Commands::Init { output, force }) = &args.cmd {
+        if let Err(e) = init(output, *force) {
+            panic!("{e}");
+        }
+        process::exit(0);
+    }
 
     let suriconf_string = match yaml::open_yaml(&args.suriconf_config) {
         Ok(suriconf_string) => suriconf_string,
