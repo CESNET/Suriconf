@@ -19,7 +19,7 @@ pub struct Args {
     #[clap(short='s', long="sconf")]
     pub suricata_config: Option<PathBuf>,
 
-    /// Specify Suriconf configuration file
+    /// Specify Suriconf configuration file (default: ./suriconf.yaml)
     #[clap(short='c', long="conf", default_value="suriconf.yaml")]
     pub suriconf_config: PathBuf,
 
@@ -93,6 +93,18 @@ pub enum Commands {
 
         /// Change max cpu usage
         #[clap(short='C', long="cpu", value_delimiter = ' ', num_args = 1..)]
-        max_cpu_usage_vec: Option<Vec<u64>>,
+        max_cpu_usage_vec: Option<Vec<String>>,
+    },
+
+    /// Generate Suriconf configuration file
+
+    Init {
+        /// Output path (default: ./suriconf.yaml)
+        #[arg(short, long, default_value = "./suriconf.yaml")]
+        output: PathBuf,
+
+        /// Overwrite existing file
+        #[arg(short, long)]
+        force: bool,
     }
 }

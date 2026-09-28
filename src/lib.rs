@@ -27,8 +27,11 @@ mods!(
     flow_threads,
     regression,
     module,
-    cpu_affinity
+    cpu_affinity,
+    config_gen
 );
+
+pub const DEFAULT_CONFIG: &str = include_str!("../suriconf.yaml");
 
 static FLOW_WINDOW: u64 = 5; // in seconds
 static MIN_RUN: u64 = 360;
