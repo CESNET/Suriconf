@@ -7,7 +7,7 @@ This file represents a CPU affinity module.
 */
 
 use chrono::{DateTime, Utc};
-use std::collections::{HashMap};
+use std::collections::{HashMap, HashSet};
 use serde_json::{Value, Number};
 use std::fs;
 use crate::json::CpuThread;
@@ -453,10 +453,34 @@ impl CpuAffinityModule {
             .map(|a| a.as_u64().expect("Expected u64 value")).collect()
     }
 
+    fn get_max_cpu_usage_vec(&self, answers: &Vec<Answer<'_>>) -> Vec<u64> {
+        let value = answers.iter().find(|h| h.key == &Keys::max_cpu_usage_vec)
+            .expect("Max cpu usage vector cannot be found.").value;
+
+        let seq = value.as_array().expect("Unable to get max_cpu_usage_vec as array.");
+
+        let mut cpus: Vec<u64> = Vec::new();
+        let mut seen = HashSet::new();
+
+        for item in seq {
+            let s = match item {
+                Value::Number(n) => n.to_string(),
+                Value::String(s) => s.clone(),
+                u => panic!("Invalid CPU {:?}.", u)
+            };
+            yaml::insert_cpu(&s, &mut seen, &mut cpus)
+                .expect("Unable to parse max_cpu_usage_vec as u64 vector.");
+        }
+
+        if self.debug {
+            println!("max_cpu_usage_vec: {:?}", cpus);
+        }
+
+        cpus
+    }
+
     pub fn set_new_cpu_set(&self, answers: &Vec<Answer<'_>>, mut new_workers: u64) -> Vec<u64>  {
-        let max_cpu_usage_vec: Vec<u64> = answers.iter().find(|h| h.key == &Keys::max_cpu_usage_vec)
-            .expect("Max cpu usage vector cannot be found.").value.as_array().expect("Unable to get array from max cpu usage vector.")
-            .iter().map(|a| a.as_u64().expect("Expected u64 value")).collect();
+        let max_cpu_usage_vec = self.get_max_cpu_usage_vec(answers);
 
         if self.debug {
             println!("new_workers: {new_workers}");

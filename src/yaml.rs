@@ -1058,7 +1058,7 @@ fn parse_cpu_list(items: &[String]) -> Result<Vec<u64>, String>  {
     Ok(cpus)
 }
 
-fn expand_cpu_range(s: &str) -> Result<Vec<u64>, String>  {
+pub fn expand_cpu_range(s: &str) -> Result<Vec<u64>, String>  {
     let system_cpus = num_cpus::get();
     let s = s.trim();
     match s.split_once('-') {
@@ -1086,7 +1086,7 @@ fn expand_cpu_range(s: &str) -> Result<Vec<u64>, String>  {
     }
 }
 
-fn insert_cpu(s: &str, seen: &mut HashSet<u64>, cpus: &mut Vec<u64>) -> Result<(), String> {
+pub fn insert_cpu(s: &str, seen: &mut HashSet<u64>, cpus: &mut Vec<u64>) -> Result<(), String> {
     for cpu in expand_cpu_range(s)? {
         if seen.insert(cpu) {
             cpus.push(cpu);
