@@ -452,7 +452,7 @@ impl MemoryModule {
         };
         let hashsize  = self.questions.get(&Keys::defrag_hashsize).expect("Unable to get defrag.").as_f64().expect("Unable to get defrag hash_size as f64.");
 
-        hashsize*DEFRAG_TRACKER_HASHROW+(max_defrag_tracker_active+(self.get_ippair_host_defrag_stream_reassembly_prealloc(answers, &HashType::Defrag) as f64)*MULTIPLIER)*DEFRAG_TRACKER
+        hashsize*DEFRAG_TRACKER_HASHROW+(max_defrag_tracker_active+(self.get_ippair_host_defrag_stream_reassembly_prealloc(answers, &HashType::Defrag) as f64)*MULTIPLIER)*DEFRAG_TRACKER*4.0
     }
 
     fn get_stream_memcap(&self, answers: &Vec<Answer<'_>>) -> f64 {
