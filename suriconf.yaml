@@ -37,4 +37,4 @@ variables:
   interface: eth0
   capture_mode: af_packet # dpdk
   max_memory_usage: 1 GiB
-  max_cpu_usage_vec: [0] # [0-6]
+  max_cpu_usage_vec: [0-2] # [0-6]
