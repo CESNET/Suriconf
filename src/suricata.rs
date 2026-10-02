@@ -388,7 +388,7 @@ fn get_cores_with_threads(suri_pid: i32, sys: &mut SystemVar) {
 }
 
 pub fn kill_suricata(child: &mut Child) {
-    let end_timeout = Duration::from_secs(30);
+    let end_timeout = Duration::from_secs(300);
     let pid = child.id();
     let mut output = Command::new("sudo")
     .arg("pkill")
