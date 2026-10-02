@@ -14,8 +14,7 @@
 ---
 
 ## Bugs
-- The YAML file is converted to JSON and then back to YAML for searching, which can alter the original formatting and is therefore not fully correct. A hotfix function was introduced specifically for the purposes of the bachelor’s thesis.
-- The regression sometimes has fewer samples than is required. 
+- The YAML file is converted to JSON and then back to YAML for searching, which can alter the original formatting and is therefore not fully correct. A hotfix function was introduced specifically for the purposes of the bachelor’s thesis. 
 - Disable syslog and suricata.log logging after configuration.
 - Better estimation of TCP overhead.
 - CPU affinity module should work with `check_nic_warning_counter`, `get_capture_errors_stat` functions.
@@ -23,7 +22,9 @@
 - The `tcp_reuse` timeout is not considered.
 - The calculations for flow_memcap and stream_memcap do not account for all memory components in some cases.
 - Fragment structures are not included in `defrag_memuse` at all. (Suricata)
+- Hotfix for defrag_memcap, needs further analysis.
 - Do not log counters with zero values. Adapt the program to handle missing counters.
+- Check for parameter changes (CLI) in Suriconf. (CPU affinity module)
 
 ## Future work
 - Add load factor for hash tables in memory module.
