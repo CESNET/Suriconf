@@ -1,7 +1,7 @@
 %YAML 1.1
 ---
 
-suriconf-version: 1.1.0-dev
+suriconf-version: 1.1.0-dev.2
 
 suri-configuration: suricata.yaml
 suricata-bin: /usr/bin/suricata
