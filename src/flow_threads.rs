@@ -67,55 +67,32 @@ impl Module for FlowThreadsModule {
         }
         Change::collect_changes(&self.questions)
     }
-    }
+}
 
 impl  FlowThreadsModule {
-    fn get_recycler_count(&self, answers: &Vec<Answer<'_>>) -> (ModuleResult, Option<u64>) {
 
-        let in_queue = self.get_flows_in_queue(answers);
-        let recycled = self.get_recycled_stat(answers);
-        let uptime = self.get_uptime_stat(answers);
-        let num_elements = (MIN_RUN/5) / WINDOWS;
-
-        let in_queue_result: Vec<f64> =
-            if ROB_REGRESSION == RobRegression::Huber {
-                my_huber_regression(in_queue.clone(), uptime, FLOW_WINDOW, num_elements)
-            }
-            else {
-                my_theil_sen_regression(in_queue.clone(), uptime, FLOW_WINDOW, num_elements)
-            };
-
-        let rc_cpu_usages: Vec<Thread> = self.get_specific_cpu_usage(answers, "FR");
-
+    fn get_up_windows(result: &[f64], cpu_usages: &[Thread], num_elements: u64, threshold: f64, above: bool) -> Vec<(u64, Vec<f64>)> {
         let mut counter = 0;
         let mut sm_counter = 0;
         let mut avg_cpu_usage: Vec<f32> = Vec::new();
-        let mut current_in_queue_result: Vec<f64>;
-        let mut up=  true;
-        let mut slope_vector: Vec<RecyclerUp> = Vec::new();
+        let mut current_windows: Vec<f64>;
+        let mut up = true;
+        let mut up_windows: Vec<(u64, Vec<f64>)> = Vec::new();
         let mut tmp_slope_vector: Vec<f64> = Vec::new();
 
         loop {
+            avg_cpu_usage = Self::get_window_cpu_average_vector(cpu_usages, num_elements, counter);
 
-            for i in 0..WINDOWS {
-                for rc_cpu_usage in &rc_cpu_usages {
-                    let avg: f32 = rc_cpu_usage.cpu_usage[((counter*WINDOWS+i)*num_elements) as usize..(((counter*WINDOWS+1)+i)*num_elements) as usize]
-                        .iter().sum::<f32>() / (num_elements as f32);
-                    avg_cpu_usage.push(avg);
-                }
-            }
+            current_windows = result[(counter*WINDOWS) as usize..((counter+1)*WINDOWS) as usize].to_vec();
 
-            current_in_queue_result = in_queue_result[(counter*WINDOWS) as usize..((counter+1)*WINDOWS) as usize].to_vec();
-
-
-            for current_queue in &current_in_queue_result {
+            for current_window in &current_windows {
                 let avg: f32 = avg_cpu_usage[(sm_counter * (avg_cpu_usage.len()/WINDOWS as usize)) ..
                     ((sm_counter + 1) * (avg_cpu_usage.len()/WINDOWS as usize))]
                     .iter().sum::<f32>() / (avg_cpu_usage.len()/WINDOWS as usize) as f32;
                 sm_counter+=1;
 
-                if current_queue > &HUBER_THRESHOLD {
-                    tmp_slope_vector.push(*current_queue);
+                if (above && current_window > &threshold) || (!above && current_window < &threshold) {
+                    tmp_slope_vector.push(*current_window);
                     up &= true;
                 }
                 else {
@@ -134,26 +111,51 @@ impl  FlowThreadsModule {
             sm_counter=0;
 
             if up {
-                let mut recycler_up: RecyclerUp = Default::default();
-                recycler_up.queue_growth = tmp_slope_vector.iter().sum::<f64>() / tmp_slope_vector.len() as f64;
-                let now_in_queue = in_queue[(counter*WINDOWS*num_elements) as usize ..((counter+WINDOWS)*WINDOWS*num_elements) as usize].to_vec();
-                let now_recycled = recycled[(counter*WINDOWS*num_elements) as usize..((counter+WINDOWS)*WINDOWS*num_elements) as usize].to_vec();
-                let now_recycled: Vec<f64> = now_recycled.windows(2).map(|w| (w[1] - w[0]) as f64).collect();
-
-                recycler_up.now_in_queue_avg = now_in_queue.iter().sum::<f64>() / now_in_queue.len() as f64;
-                recycler_up.now_recycled_avg = now_recycled.iter().sum::<f64>() / now_recycled.len() as f64;
-                slope_vector.push(recycler_up);
+                up_windows.push((counter, tmp_slope_vector.clone()));
             }
 
-            let last_three = in_queue_result.iter().rev().take(3).collect::<Vec<_>>();
-            if last_three.contains(&current_in_queue_result.last().expect("Unable to get last element from current_in_queue_result vector."))  {
+            let last_three = result.iter().rev().take(WINDOWS as usize).collect::<Vec<_>>();
+            if last_three.contains(&current_windows.last().expect("Unable to get last element from current_window vector."))  {
                 break;
             }
 
             counter +=1;
-            current_in_queue_result.clear();
             avg_cpu_usage.clear();
             tmp_slope_vector.clear();
+            up = true;
+        }
+
+        up_windows
+    }
+
+    fn get_recycler_count(&self, answers: &Vec<Answer<'_>>) -> (ModuleResult, Option<u64>) {
+        let in_queue = self.get_flows_in_queue(answers);
+        let recycled = self.get_recycled_stat(answers);
+        let uptime = self.get_uptime_stat(answers);
+        let num_elements = (MIN_RUN/5) / WINDOWS;
+
+        let in_queue_result: Vec<f64> =
+            if ROB_REGRESSION == RobRegression::Huber {
+                my_huber_regression(in_queue.clone(), uptime, FLOW_WINDOW, num_elements)
+            }
+            else {
+                my_theil_sen_regression(in_queue.clone(), uptime, FLOW_WINDOW, num_elements)
+            };
+
+        let rc_cpu_usages: Vec<Thread> = self.get_specific_cpu_usage(answers, "FR");
+
+        let mut slope_vector: Vec<RecyclerUp> = Vec::new();
+
+        for (counter, tmp_slope_vector) in Self::get_up_windows(&in_queue_result, &rc_cpu_usages, num_elements, HUBER_THRESHOLD, true) {
+            let mut recycler_up: RecyclerUp = Default::default();
+            recycler_up.queue_growth = tmp_slope_vector.iter().sum::<f64>() / tmp_slope_vector.len() as f64;
+            let now_in_queue = in_queue[(counter*WINDOWS*num_elements) as usize ..((counter+WINDOWS)*WINDOWS*num_elements) as usize].to_vec();
+            let now_recycled = recycled[(counter*WINDOWS*num_elements) as usize..((counter+WINDOWS)*WINDOWS*num_elements) as usize].to_vec();
+            let now_recycled: Vec<f64> = now_recycled.windows(2).map(|w| (w[1] - w[0]) as f64).collect();
+
+            recycler_up.now_in_queue_avg = now_in_queue.iter().sum::<f64>() / now_in_queue.len() as f64;
+            recycler_up.now_recycled_avg = now_recycled.iter().sum::<f64>() / now_recycled.len() as f64;
+            slope_vector.push(recycler_up);
         }
 
         if !slope_vector.is_empty() {
@@ -177,65 +179,10 @@ impl  FlowThreadsModule {
             println!("flow_mgr_full_result: {:?}, mgr_cpu_usages: {:?}",  flow_mgr_full_result, mgr_cpu_usages);
         }
 
-        let mut counter = 0;
-        let mut sm_counter = 0;
-        let mut avg_cpu_usage: Vec<f32> = Vec::new();
-        let mut current_flow_mgr_full_result: Vec<f64>;
-        let mut up=  true;
         let mut slope_vector: Vec<f64> = Vec::new();
-        let mut tmp_slope_vector: Vec<f64> = Vec::new();
 
-        loop {
-
-            for i in 0..WINDOWS {
-                for mgr_cpu_usage in &mgr_cpu_usages {
-                    let avg: f32 = mgr_cpu_usage.cpu_usage[((counter*WINDOWS+i)*num_elements) as usize..(((counter*WINDOWS+1)+i)*num_elements) as usize]
-                        .iter().sum::<f32>() / (num_elements as f32);
-                    avg_cpu_usage.push(avg);
-                }
-            }
-
-            current_flow_mgr_full_result = flow_mgr_full_result[(counter*WINDOWS) as usize..((counter+1)*WINDOWS) as usize].to_vec();
-
-
-            for flow_mgr_full_result in &current_flow_mgr_full_result {
-                let avg: f32 = avg_cpu_usage[(sm_counter * (avg_cpu_usage.len()/WINDOWS as usize)) ..
-                    ((sm_counter + 1) * (avg_cpu_usage.len()/WINDOWS as usize))]
-                    .iter().sum::<f32>() / (avg_cpu_usage.len()/WINDOWS as usize) as f32;
-                sm_counter+=1;
-
-                if flow_mgr_full_result < &MANAGER_SLOPE {
-                    tmp_slope_vector.push(*flow_mgr_full_result);
-                    up &= true;
-                }
-                else {
-                    up &= false;
-                    break;
-                }
-
-                if avg > CPU_USAGE_MAX {
-                    up &= true;
-                }
-                else {
-                    up &= false;
-                    break;
-                }
-            }
-            sm_counter=0;
-
-            if up {
-                slope_vector.push(tmp_slope_vector.iter().sum::<f64>() / tmp_slope_vector.len() as f64);
-            }
-
-            let last_three = flow_mgr_full_result.iter().rev().take(3).collect::<Vec<_>>();
-            if last_three.contains(&current_flow_mgr_full_result.last().expect("Unable to get last element from current_flow_mgr_full_result vector."))  {
-                break;
-            }
-
-            counter +=1;
-            current_flow_mgr_full_result.clear();
-            avg_cpu_usage.clear();
-            tmp_slope_vector.clear();
+        for (_counter, tmp_slope_vector) in Self::get_up_windows(&flow_mgr_full_result, &mgr_cpu_usages, num_elements, MANAGER_SLOPE, false) {
+            slope_vector.push(tmp_slope_vector.iter().sum::<f64>() / tmp_slope_vector.len() as f64);
         }
 
         if !slope_vector.is_empty() {
@@ -278,6 +225,7 @@ impl  FlowThreadsModule {
 
             in_queue.push(queue_size as f64);
         }
+        
         in_queue
     }
 
@@ -285,4 +233,19 @@ impl  FlowThreadsModule {
         answers.iter().find(|h| h.key == &Keys::flow_rc_recycled).expect("Unable to get flow_rc_recycled.").value
             .as_array().expect("Unable to create array from flow_rc_recycled record.").iter().map(|a| a.as_u64().expect("Unable to transform flow_rc_recycled to u64.")).collect::<Vec<u64>>()
     }
+
+    fn get_window_cpu_average_vector(cpu_usages: &[Thread], num_elements: u64, counter: u64) -> Vec<f32> {
+        let mut avg_cpu_usage: Vec<f32> = Vec::new();
+
+        for i in 0..WINDOWS {
+            for cpu_usage in cpu_usages {
+                let avg: f32 = cpu_usage.cpu_usage[((counter*WINDOWS+i)*num_elements) as usize..(((counter*WINDOWS+1)+i)*num_elements) as usize]
+                    .iter().sum::<f32>() / (num_elements as f32);
+                avg_cpu_usage.push(avg);
+            }
+        }
+
+        avg_cpu_usage
+    }
+
 }
