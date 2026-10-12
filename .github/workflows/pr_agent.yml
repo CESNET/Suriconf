@@ -26,7 +26,8 @@ jobs:
           config.model: ${{ secrets.EINFRA_MODEL }}
           config.model_weak: ${{ secrets.EINFRA_MODEL_WEAK }}
           config.custom_model_max_tokens: "256000"
-          config.fallback_models: "[]"
+          config.fallback_models: ${{ secrets.EINFRA_FALLBACK_MODELS }}
+          config.ai_timeout: "300"
           github_action_config.auto_review: "true"
           github_action_config.auto_describe: "true"
           github_action_config.auto_improve: "true"
