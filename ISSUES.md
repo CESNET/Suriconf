@@ -31,7 +31,6 @@
 - Reallocate memory when a memcap limit is reached - LP.
 
 ## Code quality
-- The recycler and manager use the same mechanism, resulting in duplicated code.
 - Use shell-check for bash scripts, improve test automation.
 - Refactor logging using Rust crates.
 
