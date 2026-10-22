@@ -8,6 +8,7 @@
 
 ---
 - [Suriconf pipeline](#suriconf-pipeline)
+  - [Suricata configuration tuning](#suricata-configuration-tuning)
   - [Preconfiguration stage](#preconfiguration-stage)
   - [Query and Execute stage](#query-and-execute-stage)
 - [Modules](#modules)
@@ -22,7 +23,7 @@
 
 At the start, the user must provide both the Suricata configuration file (which can be the default one) and the Suriconf configuration file. See instructions in [README.md](README.md).
 
-In static analysis mode, Suriconf operates in two main stages:
+In static analysis mode, Suriconf first tunes the Suricata configuration (Suricata configuration tuning) and then operates in two main stages - Preconfiguration and Query and Execute.
 
 ```
 ┌──────────┐
@@ -32,25 +33,38 @@ In static analysis mode, Suriconf operates in two main stages:
      │ suriconf.yaml
      ▼
 ┌────────────────────────────────────────────────────────────────────────┐
-│  Preconfiguration stage                                                │
-│  - execute Suricata on network interface                               │
-│  - collect performance data                                            │
-│  - save logs                                                           │
-└─────────────────────┬──────────────────────────────────────────────────┘
-                      │
-                      ▼
+│ Suricata configuration tuning                                          │
+│ - tune suricata.yaml                                                   │
+└────────────────────────────────────┬───────────────────────────────────┘
+                                     │ tuned suricata.yaml
+                                     ▼
 ┌────────────────────────────────────────────────────────────────────────┐
-│  Query and Execute stage                                               │
-│  - request keys for required data                                      │
-│  - run modules with required data in dependency order                  │
-│  - write all changes to suricata_result.yaml and nic_setup.sh          │
-└────────────────────────────────┼───────────────────────────────────────┘
-                                 │
-                                 ▼
-                          suricata_result.yaml (optimized config)
-                          nic_setup.sh (network interface setup script)
-                          
+│ Preconfiguration stage                                                 │
+│ - execute Suricata on network interface                                │
+│ - collect performance data                                             │
+│ - save logs                                                            │
+└────────────────────────────────────┬───────────────────────────────────┘
+                                     │
+                                     ▼
+┌────────────────────────────────────────────────────────────────────────┐
+│ Query and Execute stage                                                │
+│ - request keys for required data                                       │
+│ - run modules with required data in dependency order                   │
+│ - write all changes to suricata_result.yaml and nic_setup.sh           │
+└────────────────────────────────────┬───────────────────────────────────┘
+                                     │
+                                     ▼
+                                suricata_result.yaml (optimized config)
+                                nic_setup.sh (network interface setup script)
 ```
+
+### Suricata configuration tuning
+This step runs before the Preconfiguration stage. It edits the provided Suricata configuration file so that Suricata can process more network traffic during the preconfiguration run, using all logical CPU cores listed in the Suriconf configuration file:
+
+- one core for the flow recycler thread and one core for the flow manager thread (if Flow thread module is enabled),
+- all remaining cores for worker threads (if CPU affinity module is enabled).
+
+It always sets the runmode to `workers` and enables `set-cpu-affinity`. If the CPU affinity module is enabled, it also configures the AF_PACKET interface and creates the NIC setup script. The core assignment here is similar to the one in the CPU affinity module, but it does not take NUMA locality into account. The final core assignment, including NUMA locality, is determined later by the CPU affinity module.
 
 ### Preconfiguration stage
 The first stage performs a Suricata preconfiguration run on a defined network interface. During this run, the system collects performance data about the system that will be configured, such as CPU core load, and saves logs about the observed network traffic. Every five seconds, it collects and stores samples. 

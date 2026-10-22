@@ -16,6 +16,7 @@ use suriconf::json::Preconfiguration;
 use suriconf::query::Resources;
 use suriconf::structures::{CreatedLogs, JsonVar, SuricataAgain};
 use suriconf::suricata;
+use suriconf::suricata_tun;
 use suriconf::yaml;
 use suriconf::yaml::Suriconf;
 
@@ -64,7 +65,12 @@ fn main() {
 
     let system_time = SystemTime::now();
     let datetime: DateTime<Utc> = system_time.into();
-    match yaml::check_set_cpu_affinity(&mut suricata_string, &suriconf, &mut json_var, &datetime) {
+    match suricata_tun::check_set_cpu_affinity(
+        &mut suricata_string,
+        &suriconf,
+        &mut json_var,
+        &datetime,
+    ) {
         Err(e) => {
             panic!("{e}")
         }

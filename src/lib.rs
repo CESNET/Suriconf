@@ -20,6 +20,7 @@ mods!(
     structures,
     yaml,
     suricata,
+    suricata_tun,
     json,
     memory_usage,
     query,

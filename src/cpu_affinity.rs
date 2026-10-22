@@ -18,6 +18,7 @@ use std::process::Command;
 use itertools::{izip};
 use std::fs::File;
 use crate::yaml;
+use crate::suricata_tun;
 
 #[derive(Debug)]
 pub struct CpuAffinityModule {
@@ -77,9 +78,9 @@ impl Module for CpuAffinityModule {
         *self.questions.get_mut(&Keys::wrk_cpu_set).expect("Unable to get wrk_cpu_set from intern table.") = new_wrk_cpu_set;
 
         let datetime  = self.get_datetime_stat(answers);
-        let mut nic_file = yaml::create_nic_bash_file(&datetime);
+        let mut nic_file = suricata_tun::create_nic_bash_file(&datetime);
         
-        yaml::disable_irqbalance(&mut nic_file);
+        suricata_tun::disable_irqbalance(&mut nic_file);
         self.module_disable_offloading(answers, &mut nic_file);
         self.module_set_rss(answers, &mut nic_file);
         self.module_af_packet_tuning(answers, &mut nic_file);
@@ -561,25 +562,25 @@ impl CpuAffinityModule {
         let ethtool =  self.get_ethtool_stat(answers);
         let ip = self.get_ip_stat(answers);
         let wrk_cpu_set_len = self.get_wrk_cpu_set().len() as u64;
-        yaml::af_packet_tuning(interface, wrk_cpu_set_len, ethtool, ip, nic_file);
+        suricata_tun::af_packet_tuning(interface, wrk_cpu_set_len, ethtool, ip, nic_file);
     }
 
     fn module_set_rss(&self, answers: &Vec<Answer<'_>>, nic_file: &mut File) {
         let interface = self.get_interface_stat(answers);
         let ethtool =  self.get_ethtool_stat(answers);
         let wrk_cpu_set_len = self.get_wrk_cpu_set().len() as u64;
-        _ = yaml::set_rss(interface, wrk_cpu_set_len, ethtool, nic_file);
+        _ = suricata_tun::set_rss(interface, wrk_cpu_set_len, ethtool, nic_file);
     }
 
     fn module_set_hard_irq(&self, answers: &Vec<Answer<'_>>, nic_file: &mut File) {
         let interface = self.get_interface_stat(answers);
         let wrk_cpu_set = self.get_wrk_cpu_set();
-        yaml::set_hard_irq(interface, &wrk_cpu_set, nic_file);
+        suricata_tun::set_hard_irq(interface, &wrk_cpu_set, nic_file);
     }
 
     fn module_disable_offloading(&self, answers: &Vec<Answer<'_>>, nic_file: &mut File) {
         let interface = self.get_interface_stat(answers);
         let ethtool =  self.get_ethtool_stat(answers);
-        yaml::disable_offloading(interface, ethtool, nic_file);
+        suricata_tun::disable_offloading(interface, ethtool, nic_file);
     }
 }
