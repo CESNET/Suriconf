@@ -53,6 +53,13 @@ fn main() {
         }
         Ok(()) => {}
     }
+
+    if !args.verbose {
+        if let Err(e) = yaml::disable_loggging(&mut suricata_string) {
+            panic!("{e}");
+        }
+    }
+        
     let mut json_var: JsonVar = Default::default();
 
     let system_time = SystemTime::now();
