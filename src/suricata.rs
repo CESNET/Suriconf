@@ -22,7 +22,7 @@ use std::{fs, thread};
 use procfs::process::{Process};
 use signal_hook::consts::SIGINT;
 use signal_hook::iterator::Signals;
-use std::path::{Path, PathBuf};
+use std::path::{PathBuf};
 use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::io;
