@@ -157,12 +157,6 @@ pub fn create_module(module: &Modules, analysis: &Analysis, debug: bool) -> Box<
         _ => panic!("Unknown module."),
     }
 }
-pub struct CreatedLogs {
-    pub suri_configuration: PathBuf,
-    pub stats: PathBuf,
-    pub flows: PathBuf,
-    pub preconfiguration: PathBuf,
-}
 
 #[derive(Debug, Hash, Eq, PartialEq, Copy, Clone)]
 pub enum Keys { // JUST FOR FLOW
@@ -390,6 +384,13 @@ impl FileNames {
             FileNames::preconf => include_str!("query/preconf.json"),
         }
     }
+}
+
+pub struct CreatedLogs {
+    pub suri_configuration: PathBuf,
+    pub stats: PathBuf,
+    pub flows: PathBuf,
+    pub preconfiguration: PathBuf,
 }
 
 impl CreatedLogs {
