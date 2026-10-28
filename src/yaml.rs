@@ -664,6 +664,28 @@ fn create_json_for_logging(enabled: bool, stats: EveLogType)-> Result<Value, Box
     Ok(required)
 }
 
+pub fn disable_logging(suricata_string: &mut Value) -> Result<(), String> {
+    let outputs = suricata_string
+        .get_mut("logging")
+        .and_then(|v| v.get_mut("outputs"))
+        .and_then(|v| v.as_sequence_mut())
+        .ok_or_else(|| String::from("Unable to find logging outputs in Suricata configuration."))?;
+
+    for o in outputs.iter_mut() {
+        if let Some(m) = o.as_mapping_mut() {
+            for key in ["file", "syslog"] {
+                if let Some(inner) = m.get_mut(key).and_then(|v| v.as_mapping_mut()) {
+                    inner.insert(
+                        Value::String("enabled".into()),
+                        Value::String("no".into()),
+                    );
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
 pub fn check_enable_stats_log(suricata_string: &mut Value) -> Result<(), String> {
     if let Some(stats) = suricata_string.get_mut("stats") {
 
