@@ -12,7 +12,10 @@ use crate::structures::{Analysis, Mode, CaptureMode, Modules};
 
 /// Suriconf - Configuration Assistant for Suricata
 #[derive(Parser, Debug)]
-#[clap(version)]
+#[command(
+    version,
+    about = concat!("Suriconf ", env!("CARGO_PKG_VERSION"), "\nConfiguration assistant for Suricata")
+)]
 pub struct Args {
 
     /// Specify Suricata configuration file
