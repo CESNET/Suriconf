@@ -126,15 +126,8 @@ impl Resources {
 
         for file_name in FileNames::iter() {
             let mut file_table = FileQuestionStructure::new(file_name);
-            let path_to_query_file = PathBuf::from("./query")
-                .join(format!("{}.json", file_name.to_string()));
-
-            let json = match open_json(&path_to_query_file) {
-                Ok(json) => { json },
-                Err(e) => { panic!("{e}.") }
-            };
-
-            let json = match json_to_value(json) {
+            
+            let json: Value = match serde_json::from_str(file_name.query_json()) {
                 Ok(json) => { json },
                 Err(e) => { panic!("{e}.") }
             };

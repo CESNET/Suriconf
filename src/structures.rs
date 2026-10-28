@@ -157,12 +157,6 @@ pub fn create_module(module: &Modules, analysis: &Analysis, debug: bool) -> Box<
         _ => panic!("Unknown module."),
     }
 }
-pub struct CreatedLogs {
-    pub suri_configuration: PathBuf,
-    pub stats: PathBuf,
-    pub flows: PathBuf,
-    pub preconfiguration: PathBuf,
-}
 
 #[derive(Debug, Hash, Eq, PartialEq, Copy, Clone)]
 pub enum Keys { // JUST FOR FLOW
@@ -381,6 +375,24 @@ pub enum FileNames {
     suriconf,
     preconf
 }
+
+impl FileNames {
+    pub fn query_json(&self) -> &'static str {
+        match self {
+            FileNames::suricata => include_str!("query/suricata.json"),
+            FileNames::suriconf => include_str!("query/suriconf.json"),
+            FileNames::preconf => include_str!("query/preconf.json"),
+        }
+    }
+}
+
+pub struct CreatedLogs {
+    pub suri_configuration: PathBuf,
+    pub stats: PathBuf,
+    pub flows: PathBuf,
+    pub preconfiguration: PathBuf,
+}
+
 impl CreatedLogs {
     pub fn new(log_dir: &PathBuf, datetime: &DateTime<Utc>) -> Self {
         let mut suri_configuration = PathBuf::from("./tmp");
