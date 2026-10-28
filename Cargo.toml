@@ -10,6 +10,7 @@ homepage = "https://github.com/CESNET/Suriconf"
 repository = "https://github.com/CESNET/Suriconf"
 keywords = ["cli", "configuration", "suricata", "suriconf"]
 categories = ["command-line-utilities"]
+exclude = [".github/"]
 
 [dependencies]
 clap = { version = "4.5.48", features = ["derive", "env"] }
