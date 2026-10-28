@@ -381,6 +381,17 @@ pub enum FileNames {
     suriconf,
     preconf
 }
+
+impl FileNames {
+    pub fn query_json(&self) -> &'static str {
+        match self {
+            FileNames::suricata => include_str!("query/suricata.json"),
+            FileNames::suriconf => include_str!("query/suriconf.json"),
+            FileNames::preconf => include_str!("query/preconf.json"),
+        }
+    }
+}
+
 impl CreatedLogs {
     pub fn new(log_dir: &PathBuf, datetime: &DateTime<Utc>) -> Self {
         let mut suri_configuration = PathBuf::from("./tmp");
