@@ -197,7 +197,7 @@ impl Resources {
     }
 
     pub fn sort_modules(&mut self) {
-        const ORDER: [&Modules; 4] = [&Modules::FlowThreads , &Modules::CpuAffinity, &Modules::Flow, &Modules::MemoryModule];
+        const ORDER: [&Modules; 4] = [&Modules::FlowThreads , &Modules::CpuAffinity, &Modules::Flow, &Modules::MemoryUsage];
         self.suriconf_struct.modules.sort_by_key(|m| {
             ORDER.iter()
                 .position(|&o| o == m)

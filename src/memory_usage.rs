@@ -15,13 +15,13 @@ use crate::{ACTIVE_LIMIT, HOST_HASHROW, IPPAIR_HASHROW, HOST_OBJECT, IPPAIR_OBJE
             STREAM_TCP_SACK_RECORD, FRAGMENTS, TCP_SEGMENT, MTU, MAX_PENDING_PACKETS, DEFAULT_PACKET_SIZE};
 
 #[derive(Debug)]
-pub struct MemoryModule {
+pub struct MemoryUsage {
     pub questions: HashMap<Keys, Value>, // changed
     pub flow_map: BTreeMap<u64, Flow>,
     pub debug: bool
 }
 
-impl Module for MemoryModule {
+impl Module for MemoryUsage {
     fn new(_analysis: &Analysis, debug: bool) -> Self {
         let keys = [
             Keys::max_memory_usage,
@@ -209,7 +209,7 @@ impl Default for SetTable {
     }
 }
 
-impl MemoryModule {
+impl MemoryUsage {
 
     fn check_mem_warning_counter(&self, answers: &Vec<Answer<'_>>) {
 

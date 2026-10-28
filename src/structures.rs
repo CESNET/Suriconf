@@ -20,7 +20,7 @@ use crate::flow::FlowModule;
 use clap::{ValueEnum};
 use crate::flow_threads::FlowThreadsModule;
 use crate::module::Module;
-use crate::memory_usage::MemoryModule;
+use crate::memory_usage::MemoryUsage;
 use crate::cpu_affinity::CpuAffinityModule;
 use crate::json::CpuThread;
 
@@ -50,7 +50,7 @@ pub enum Modules {
     FlowThreads,
     CpuAffinity,
     Flow,
-    MemoryModule
+    MemoryUsage
 }
 
 impl Modules {
@@ -59,7 +59,7 @@ impl Modules {
             "flow_threads" => Modules::FlowThreads,
             "cpu_affinity" => Modules::CpuAffinity,
             "flow" => Modules::Flow,
-            "memory_usage" => Modules::MemoryModule,
+            "memory_usage" => Modules::MemoryUsage,
             _ => panic!("Unable to convert key string slice.")
         }
     }
@@ -152,7 +152,7 @@ pub fn create_module(module: &Modules, analysis: &Analysis, debug: bool) -> Box<
     match module {
         Modules::FlowThreads =>  Box::new(FlowThreadsModule::new(analysis, debug)),
         Modules::Flow => Box::new(FlowModule::new(analysis, debug)),
-        Modules::MemoryModule => Box::new(MemoryModule::new(analysis, debug)),
+        Modules::MemoryUsage => Box::new(MemoryUsage::new(analysis, debug)),
         Modules::CpuAffinity => Box::new(CpuAffinityModule::new(analysis, debug)),
         _ => panic!("Unknown module."),
     }
@@ -526,7 +526,7 @@ pub enum Mode {
 
 impl Default for Mode {
     fn default() -> Self {
-        Mode::Suggestion
+        Mode::ForceModify
     }
 }
 
