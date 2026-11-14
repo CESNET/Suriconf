@@ -217,14 +217,14 @@ impl MemoryModule {
         let ippair_memcap = Byte::parse_str(ippair_memcap_str, true).ok().map(|b| b.as_u64()).expect("Unable to convert ippair_memcap to Bytes.");
         let ippair_memuse = answers.iter().find(|a| a.key == &Keys::ippair_memuse).expect("Unable to get ippair memuse maximum.").value.as_array().and_then(|arr| arr.iter().filter_map(|v| v.as_u64()).max()).expect("Unable to get ippair memuse maximum.");
         if ippair_memuse as f64 >= (ippair_memcap as f64)* 0.95 {
-            println!("IPpair memuse is 95%, continue.")
+            log::warn!("IPpair memuse is 95%, continue.")
         }
 
         let host_memcap_str = answers.iter().find(|a| a.key == &Keys::ippair_memcap).expect("Unable to get host memcap.").value.as_str().expect("Unable to get hosy memcap as str.");
         let host_memcap = Byte::parse_str(host_memcap_str, true).ok().map(|b| b.as_u64()).expect("Unable to convert host_memcap to Bytes.");
         let host_memuse = answers.iter().find(|a| a.key == &Keys::host_memuse).expect("Unable to get host memuse maximum.").value.as_array().and_then(|arr| arr.iter().filter_map(|v| v.as_u64()).max()).expect("Unable to get host memuse maximum.");
         if host_memuse as f64 >= (host_memcap as f64)*0.95 {
-            println!("Host memuse is 95%, continue.")
+            log::warn!("Host memuse is 95%, continue.")
         }
 
         let defrag_max_frags_reached = answers.iter().find(|a| a.key == &Keys::defrag_max_frags_reached).expect("Unable to get max frags reached maximum.").value.as_array().and_then(|arr| arr.iter().filter_map(|v| v.as_u64()).max()).expect("Unable to get max frags reached maximum.");
@@ -250,12 +250,12 @@ impl MemoryModule {
 
         let tcp_reassembly_gap = answers.iter().find(|a| a.key == &Keys::tcp_reassembly_gap).expect("Unable to get reassembly gap maximum.").value.as_array().and_then(|arr| arr.iter().filter_map(|v| v.as_u64()).max()).expect("Unable to get reassembly gap maximum.");
         if tcp_reassembly_gap > 0 {
-            println!("TCP traffic has gaps: {tcp_reassembly_gap}, continue.")
+            log::warn!("TCP traffic has gaps: {tcp_reassembly_gap}, continue.")
         }
 
         let tcp_pkt_on_wrong_thread = answers.iter().find(|a| a.key == &Keys::tcp_pkt_on_wrong_thread).expect("Unable to get packets on wrong thread maximum.").value.as_array().and_then(|arr| arr.iter().filter_map(|v| v.as_u64()).max()).expect("Unable to get packets on wrong thread maximum.");
         if tcp_pkt_on_wrong_thread > 0 {
-            println!("Bad load balancing, TCP traffic is processed on incorrect threads: {tcp_pkt_on_wrong_thread}, continue.")
+            log::warn!("Bad load balancing, TCP traffic is processed on incorrect threads: {tcp_pkt_on_wrong_thread}, continue.")
         }
     }
 
@@ -331,8 +331,8 @@ impl MemoryModule {
 
         for (active_segments, reassembly_memuse) in tcp_active_segments_vec.iter().zip(reassembly_memuse_vec.iter()) {
             if self.debug {
-                println!("active_segments: {active_segments}, reassembly_memuse: {reassembly_memuse}");
-                println!("reassembly_prealloc:{}", reassembly_prealloc*(self.get_workers(answers)as u64))
+                log::debug!("Active_segments: {active_segments}, reassembly_memuse: {reassembly_memuse}.");
+                log::debug!("Reassembly_prealloc: {}.", reassembly_prealloc*(self.get_workers(answers)as u64))
             }
             let overhead = reassembly_memuse - ((reassembly_prealloc * self.get_workers(answers) as u64) + active_segments)*(TCP_SEGMENT as u64);
             if self.get_max_tcp_active_sessions_stat(answers) == 0 {
@@ -345,7 +345,7 @@ impl MemoryModule {
         }
 
         if self.debug {
-            println!("raw: max_packet_overhead: {max_packet_overhead}")
+            log::debug!("Raw: max_packet_overhead: {max_packet_overhead}.")
         }
 
         if max_packet_overhead == 0 {
@@ -463,7 +463,7 @@ impl MemoryModule {
         };
 
         if self.debug {
-            println!("max_tcp_active_sessions: {max_tcp_active_sessions}");
+            log::debug!("Max_tcp_active_sessions: {max_tcp_active_sessions}.");
         }
 
         let prealloc = self.get_ippair_host_defrag_stream_reassembly_prealloc(answers, &HashType::Stream) as f64;
@@ -489,8 +489,8 @@ impl MemoryModule {
         let workers = self.get_new_workers(answers);
 
         if self.debug {
-            println!("max_packet_overhead: {max_segment_overhead}, max_tcp_active_segments: {max_tcp_active_segments}");
-            println!("max_tcp_active_sessions:{max_tcp_active_sessions}, prealloc:{prealloc}")
+            log::debug!("Max_packet_overhead: {max_segment_overhead}, max_tcp_active_segments: {max_tcp_active_segments}.");
+            log::debug!("Max_tcp_active_sessions: {max_tcp_active_sessions}, prealloc: {prealloc}.")
         }
 
         (max_tcp_active_sessions+(prealloc*workers))*max_segment_overhead+(max_tcp_active_segments+(prealloc*workers))*(TCP_SEGMENT as f64)
@@ -551,7 +551,7 @@ impl MemoryModule {
         };
 
         if self.debug  {
-            println!("max_pending_packets: {max_pending_packets}, default_packet_size: {default_packet_size}");
+            log::debug!("Max_pending_packets: {max_pending_packets}, default_packet_size: {default_packet_size}.");
         }
 
         (max_pending_packets, default_packet_size)

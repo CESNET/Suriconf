@@ -100,12 +100,12 @@ impl Module for FlowModule {
 
     fn main(&mut self, answers: &Vec<Answer<'_>>) -> Vec<Change> {
         if self.debug {
-            println!("Suricata max flow active: {}", self.get_suri_max_flow_active_stat(answers));
+            log::debug!("Suricata max flow active: {}.", self.get_suri_max_flow_active_stat(answers));
         }
         let flow_mgr_full_result = self.get_flow_mgr_full_result(answers, self.debug);
         let min_slope = flow_mgr_full_result.iter().min_by(|a, b| a.partial_cmp(b).expect("Unable to compare flow_mgr_full_result.")).expect("Unable to find manager minimum slope.");
         if self.debug {
-            println!("Minimal slope: {min_slope}");
+            log::debug!("Minimal slope: {min_slope}.");
         }
         self.flow_map = self.sweep_line_algorithm(answers, *min_slope, self.debug);
 
@@ -150,12 +150,12 @@ impl FlowModule {
         let sync_empty = answers.iter().find(|a| a.key == &Keys::flow_wrk_spare_sync_empty).expect("Unable to get flow worker spare empty.");
 
         if sync_incomplete.value.as_array().expect("Unable to create vector from sync_incomplete").last().and_then(|a| a.as_u64()).expect("Unable to get last value as u64.") > 0 {
-            println!("WARNING: sync_incomplete is more than zero.");
+            log::warn!("Sync_incomplete is more than zero.");
             //return ModuleResult::Up
         }
 
         if sync_empty.value.as_array().expect("Unable to create vector from sync_empty.").last().and_then(|a| a.as_u64()).expect("Unable to get last value as u64.") > 0 {
-            println!("WARNING: sync_empty is more than zero.");
+            log::warn!("Sync_empty is more than zero.");
             //return ModuleResult::Up
         }
         // // if sync_avg.value.as_array().map(|arr| arr.iter().filter_map(|v| v.as_u64()).sum::<u64>()).expect("Unable to get values for sync_avg.") < SYNC_AVG {
@@ -178,7 +178,7 @@ impl FlowModule {
             }
         }
         if self.debug {
-            println!("My flow max: {}", counter.flow_max);
+            log::debug!("My flow max: {}.", counter.flow_max);
         }
         counter.flow_max as u64
     }
@@ -224,7 +224,7 @@ impl FlowModule {
                 current_average /= (flow_hash_size*FLOW_WINDOW as f64) as i64;
 
                 if self.debug {
-                    println!("flow_hash_size: {flow_hash_size}, current_row_average: {current_average}, current_row_max: {}", counter.current_max);
+                    log::debug!("Flow_hash_size: {flow_hash_size}, current_row_average: {current_average}, current_row_max: {}.", counter.current_max);
                 }
 
                 if current_average != 0 {
@@ -258,7 +258,7 @@ impl FlowModule {
         let workers: f64=  self.get_new_workers(answers);
 
         if self.debug {
-            println!("workers: {workers}");
+            log::debug!("Workers: {workers}.");
         }
 
         let hash_size =

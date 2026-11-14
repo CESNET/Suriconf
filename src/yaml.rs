@@ -517,7 +517,7 @@ pub fn set_rss(interface: &str, threads: u64, ethtool: &str, nic_file: &mut File
     };
 
     if combined_max < threads {
-        eprintln!("Warning: Shrinking the CPU set to match the RSS queues: {combined_max}");
+        log::warn!("Shrinking the CPU set to match the RSS queues: {combined_max}.");
         (threads - combined_max) as u8
     }
     else {

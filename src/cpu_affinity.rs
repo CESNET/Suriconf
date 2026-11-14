@@ -69,7 +69,7 @@ impl Module for CpuAffinityModule {
         let average_packets_for_percent_cpu_usage= self.analyze_average_packets_for_percent_cpu_usage(answers) as f64;
         let all_packets = self.analyze_all_capture_packets_for_decoding(answers) as f64;
         if self.debug {
-            println!("average_packets_for_percent_cpu_usage: {average_packets_for_percent_cpu_usage}, all_packets: {all_packets}");
+            log::debug!("Average_packets_for_percent_cpu_usage: {average_packets_for_percent_cpu_usage}, all_packets: {all_packets}.");
         }
         let new_workers = (all_packets / (average_packets_for_percent_cpu_usage * CPU_USAGE)).ceil() as u64;
         let new_wrk_cpu_set = Value::Array(self.set_new_cpu_set(answers, new_workers).iter()
@@ -106,7 +106,7 @@ impl CpuAffinityModule {
         if output.status.success() {
             let rx_crc_errors_nic = String::from_utf8_lossy(&output.stdout).trim().parse::<u64>().expect("Failed to parse rx_crc_errors.nic as u64.");
              if  rx_crc_errors_nic > 0 {
-                println!("Packets with corrupted CRC: {rx_crc_errors_nic}, continue.")
+                log::warn!("Packets with corrupted CRC: {rx_crc_errors_nic}, continue.")
             }
         }
 
@@ -119,7 +119,7 @@ impl CpuAffinityModule {
         if output.status.success() {
             let rx_jabber_nic = String::from_utf8_lossy(&output.stdout).trim().parse::<u64>().expect("Failed to parse rx_jabber.nic as u64.");
             if rx_jabber_nic > 0 {
-                println!("Jabber packets: {rx_jabber_nic}, continue.")
+                log::warn!("Jabber packets: {rx_jabber_nic}, continue.")
 
             }
         }
@@ -133,8 +133,7 @@ impl CpuAffinityModule {
         if output.status.success() {
             let rx_csum_bad_nic = String::from_utf8_lossy(&output.stdout).trim().parse::<u64>().expect("Failed to parse rx_csum_bad.nic as u64.");
             if rx_csum_bad_nic > 0 {
-                println!("Packets with bad checksum: {rx_csum_bad_nic}, continue.")
-
+                log::warn!("Packets with bad checksum: {rx_csum_bad_nic}, continue.")
             }
         }
 
@@ -147,7 +146,7 @@ impl CpuAffinityModule {
         if output.status.success() {
             let rx_length_errors_nic = String::from_utf8_lossy(&output.stdout).trim().parse::<u64>().expect("Failed to parse rx_length_errors.nic as u64.");
             if rx_length_errors_nic > 0 {
-                println!("Packets with invalid length: {rx_length_errors_nic}, continue.")
+                log::warn!("Packets with invalid length: {rx_length_errors_nic}, continue.")
             }
         }
 
@@ -161,7 +160,7 @@ impl CpuAffinityModule {
         if output.status.success() {
             let rx_oversize_nic = String::from_utf8_lossy(&output.stdout).trim().parse::<u64>().expect("Failed to parse rx_oversize.nic as u64.");
             if rx_oversize_nic > 0 {
-                println!("Oversized packets: {rx_oversize_nic}, continue.")
+                log::warn!("Oversized packets: {rx_oversize_nic}, continue.")
             }
         }
     }
@@ -175,7 +174,7 @@ impl CpuAffinityModule {
 
         for (decoder_packets_per_thread, cpu_usage_per_thread, decoder_invalid_per_thread) in izip!(decoder_packets.iter(), cpu_usage.iter(), decoder_invalid.iter()){
                 if self.debug {
-                    println!("decoder_packets_per_thread: {:?} cpu_usage_per_thread: {:?}", decoder_packets_per_thread, cpu_usage_per_thread);
+                    log::debug!("Decoder_packets_per_thread: {:?}, cpu_usage_per_thread: {:?}.", decoder_packets_per_thread, cpu_usage_per_thread);
                 }
                 let mut decoder_vec = decoder_packets_per_thread.value.clone();
                 decoder_vec = self.clean_global_statistic(&decoder_vec);
@@ -190,12 +189,12 @@ impl CpuAffinityModule {
 
                 for (cpu_usage, decoder, decoder_in) in izip!(cpu_usage_vec.iter(), decoder_vec.iter(), decoder_in_vec.iter()) {
                     if self.debug {
-                        println!("cpu_usage: {cpu_usage}, decoder: {decoder}, decoder_in: {decoder_in}");
+                        log::debug!("Cpu_usage: {cpu_usage}, decoder: {decoder}, decoder_in: {decoder_in}.");
                     }
                     if (*decoder + *decoder_in) > 0 && *cpu_usage > 0.0 {
                         let packets_per_percent_usage: f64 = ((*decoder + *decoder_in) as f32 / *cpu_usage) as f64;
                         if self.debug {
-                            println!("packets_per_percent_usage: {:?}", packets_per_percent_usage);
+                            log::debug!("Packets_per_percent_usage: {:?}.", packets_per_percent_usage);
                         }
                         record += 1;
                         average += (packets_per_percent_usage - average) / record as f64;
@@ -228,14 +227,14 @@ impl CpuAffinityModule {
         if capture_kernel_drops_drops_all > 0.0 {
             let drop_rate = (capture_kernel_drops_drops_all/capture_kernel_packets_all)*100.0;
             if self.debug {
-                println!("drop-rate: {}", drop_rate);
+                log::debug!("Drop-rate: {}.", drop_rate);
             }
             if  drop_rate > 1.0 {
                 panic!("Unable to configure Suricata, with the highest settings Suricata still drops more than 1.0 % : {drop_rate}, add more cpu cores.")
             }
         } else {
             if self.debug {
-                println!("drop-rate: 0");
+                log::debug!("Drop-rate: 0.");
             }
         }
 
@@ -248,18 +247,18 @@ impl CpuAffinityModule {
         let capture_kernel_drops_drops_all = self.get_capture_kernel_drops_all(answers) as f64;
         if capture_kernel_drops_drops_all+nic_dropped+nic_dropped_nic > 0.0 {
             if self.debug {
-                println!("capture_kernel_packets_all: {capture_kernel_packets_all} capture_kernel_drops_drops_all: {capture_kernel_drops_drops_all} nic_dropped: {nic_dropped} nic_dropped_nic: {nic_dropped_nic}");
+                log::debug!("Capture_kernel_packets_all: {capture_kernel_packets_all}, capture_kernel_drops_drops_all: {capture_kernel_drops_drops_all}, nic_dropped: {nic_dropped}, nic_dropped_nic: {nic_dropped_nic}.");
             }
             let drop_rate = ((capture_kernel_drops_drops_all+nic_dropped+nic_dropped_nic)/capture_kernel_packets_all)*100.0;
             if self.debug {
-                println!("drop-rate: {}", drop_rate);
+                log::debug!("Drop-rate: {}.", drop_rate);
             }
 
-            println!("Dropped NIC packets: {nic_dropped}, continue.")
+            log::warn!("Dropped NIC packets: {nic_dropped}, continue.")
 
         } else {
             if self.debug {
-                println!("Drop-rate: 0.0.");
+                log::debug!("Drop-rate: 0.");
             }
         }
     }
@@ -300,7 +299,7 @@ impl CpuAffinityModule {
 
                 sum += packets_vec[i] + drops_vec.get(i).expect("Unable to get drops_vec.")  + nic_dropped_nic_val;
                 if self.debug {
-                    println!("packets_vec[i]: {} drops_vec[i]: {} nic_dropped_nic_val: {} nic_dropped_val: {}", packets_vec[i], drops_vec[i], nic_dropped_nic_val, nic_dropped_val)
+                    log::debug!("Packets_vec[i]: {}, drops_vec[i]: {}, nic_dropped_nic_val: {}, nic_dropped_val: {}.", packets_vec[i], drops_vec[i], nic_dropped_nic_val, nic_dropped_val)
                 }
             }
             sum = sum / cleaned_capture_kernel_packets_vec.len() as u64;
@@ -312,8 +311,8 @@ impl CpuAffinityModule {
         let workers = self.get_workers(answers);
 
         if self.debug {
-            println!("cleaned_capture_kernel_packets_vec.len: {} workers: {}", cleaned_capture_kernel_packets_vec.len(), workers);
-            println!("average_max_packets_per_thread: {:?}", average_max_packets_per_thread);
+            log::debug!("Cleaned_capture_kernel_packets_vec.len: {}, workers: {}.", cleaned_capture_kernel_packets_vec.len(), workers);
+            log::debug!("Average_max_packets_per_thread: {:?}.", average_max_packets_per_thread);
         }
         (average_max_packets_per_thread as f64 *workers*CPU_MULTIPLIER) as u64
     }
@@ -333,11 +332,11 @@ impl CpuAffinityModule {
 
         let cv = deviation / mean;
         if cv > 0.5 {
-            println!("Warning: Variation coefficient: {cv} signs bad load balancing.")
+            log::warn!("Variation coefficient: {cv} signs bad load balancing.")
         }
 
         if self.debug {
-            println!("mean: {mean}, variance: {variance}, deviation: {deviation}")
+            log::debug!("Mean: {mean}, variance: {variance}, deviation: {deviation}.")
         }
     }
 
@@ -473,7 +472,7 @@ impl CpuAffinityModule {
         }
 
         if self.debug {
-            println!("max_cpu_usage_vec: {:?}", cpus);
+            log::debug!("Max_cpu_usage_vec: {:?}.", cpus);
         }
 
         cpus
@@ -483,7 +482,7 @@ impl CpuAffinityModule {
         let max_cpu_usage_vec = self.get_max_cpu_usage_vec(answers);
 
         if self.debug {
-            println!("new_workers: {new_workers}");
+            log::debug!("New_workers: {new_workers}.");
         }
 
         if new_workers > max_cpu_usage_vec.len() as u64 {
@@ -544,7 +543,7 @@ impl CpuAffinityModule {
             .expect("Failed to parse number.");
 
         if numa_node == -1 {
-            println!("Warning: interface not bounded to NUMA node.");
+            log::warn!("Interface not bounded to NUMA node.");
         }
         numa_node
     }

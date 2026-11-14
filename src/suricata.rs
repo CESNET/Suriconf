@@ -89,7 +89,7 @@ pub fn execute_suricata<'a>(suriconf: &Suriconf, logs: &mut CreatedLogs, options
             let reader = BufReader::new(stderr);
             for line in reader.lines() {
                 if let Ok(line) = line {
-                    eprintln!("{line}");
+                    log::debug!("{line}");
                 }
             }
         });
@@ -192,7 +192,7 @@ pub fn execute_suricata<'a>(suriconf: &Suriconf, logs: &mut CreatedLogs, options
                 }
 
                 recv(ctrl_c_events) -> _ => {
-                    println!("Ctrl+C pressed.");
+                    log::debug!("Ctrl+C pressed.");
                     kill_suricata(&mut child);
                     return None;
                 }
@@ -403,12 +403,12 @@ pub fn kill_suricata(child: &mut Child) {
     let end_start = std::time::Instant::now();
     loop {
         if let Ok(Some(_)) = child.try_wait() {
-            println!("Process exited after SIGTERM");
+            log::debug!("Process exited after SIGTERM.");
             break;
         }
 
         if end_start.elapsed() >=  end_timeout {
-            println!("Still alive, killing pid {}.", pid);
+            log::debug!("Still alive, killing pid {}.", pid);
             output = Command::new("sudo")
                 .arg("pkill")
                 .arg("-SIGKILL")

@@ -74,7 +74,7 @@ impl  FlowThreadsModule {
     fn get_up_windows(result: &[f64], cpu_usages: &[Thread], num_elements: u64, threshold: f64, above: bool) -> Vec<(u64, Vec<f64>)> {
         let mut counter = 0;
         let mut sm_counter = 0;
-        let mut avg_cpu_usage: Vec<f32> = Vec::new();
+        let mut avg_cpu_usage: Vec<f32>;
         let mut current_windows: Vec<f64>;
         let mut up = true;
         let mut up_windows: Vec<(u64, Vec<f64>)> = Vec::new();
@@ -175,7 +175,7 @@ impl  FlowThreadsModule {
         let mgr_cpu_usages: Vec<Thread> = self.get_specific_cpu_usage(answers, "FM");
 
         if self.debug {
-            println!("flow_mgr_full_result: {:?}, mgr_cpu_usages: {:?}",  flow_mgr_full_result, mgr_cpu_usages);
+            log::debug!("Flow_mgr_full_result: {:?}, mgr_cpu_usages: {:?}.",  flow_mgr_full_result, mgr_cpu_usages);
         }
 
         let mut slope_vector: Vec<f64> = Vec::new();
@@ -199,7 +199,7 @@ impl  FlowThreadsModule {
             .as_array().expect("Unable to create array from flow_rc_queue_avg record.").iter().map(|a| a.as_u64().expect("Unable to transform flow_rc_queue_avg u64.")).collect::<Vec<u64>>();
 
         if self.debug {
-            println!("recycled_avg: {:?}", recycled_avg);
+            log::debug!("Recycled_avg: {:?}.", recycled_avg);
         }
 
         let mut in_queue: Vec<f64> = Vec::new();
@@ -211,13 +211,13 @@ impl  FlowThreadsModule {
             counter += 1;
 
             if self.debug {
-                println!("record: {record}, counter: {counter}, sum: {sum}");
+                log::debug!("Record: {record}, counter: {counter}, sum: {sum}.");
             }
 
             let queue_size = (record * counter).saturating_sub(sum);
 
             if self.debug {
-                println!("queue_size: {queue_size}.");
+                log::debug!("Queue_size: {queue_size}.");
             }
 
             sum += queue_size;
