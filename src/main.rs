@@ -23,6 +23,14 @@ use suriconf::yaml::Suriconf;
 fn main() {
     let args = Args::parse();
 
+    let level = match args.verbose {
+        0 => "warn",
+        1 => "info",
+        2 => "debug",
+        _ => "trace",
+    };
+    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or(level)).init();
+
     if let Some(Commands::Init { output, force }) = &args.cmd {
         if let Err(e) = init(output, *force) {
             panic!("{e}");
@@ -54,7 +62,7 @@ fn main() {
         Ok(()) => {}
     }
 
-    if !args.verbose {
+    if args.verbose < 3 {
         if let Err(e) = yaml::disable_logging(&mut suricata_string) {
             panic!("{e}");
         }
@@ -138,7 +146,7 @@ fn main() {
         args.suriconf_config,
         logs.preconfiguration,
         json_var,
-        args.verbose,
+        args.verbose > 1,
     );
     resources.main_query();
 }

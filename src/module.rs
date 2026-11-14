@@ -62,7 +62,7 @@ pub trait Module {
         }
 
         if debug {
-            println!("flow_mgr_full_hash_pass:{:?}.", flow_mgr_full_hash_pass)
+            log::debug!("Flow_mgr_full_hash_pass: {:?}.", flow_mgr_full_hash_pass)
         }
 
         let uptime = self.get_uptime_stat(answers);
@@ -172,7 +172,7 @@ pub trait Module {
         total_used += changes.iter().map(|c| c.value).sum::<u64>();
 
         if debug  {
-            println!("total_used: {total_used}, max_memory_usage: {max_memory_usage}");
+            log::debug!("Total_used: {total_used}, max_memory_usage: {max_memory_usage}.");
         }
 
         total_used <= max_memory_usage
@@ -237,7 +237,7 @@ pub trait Module {
         }
 
         if debug {
-            println!("flow_map:{:?}", flow_map)
+            log::debug!("Flow_map: {:?}.", flow_map)
         }
         flow_map
     }

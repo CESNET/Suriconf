@@ -37,9 +37,9 @@ pub struct Args {
     #[command(subcommand)]
     pub cmd: Option<Commands>,
 
-    /// Activate debug mode in Suriconf
-    #[clap(short='v', long)]
-    pub verbose: bool,
+    /// Increase verbosity: default warn, -v info, -vv debug, -vvv trace and keep Suricata logging
+    #[clap(short='v', long, action = clap::ArgAction::Count)]
+    pub verbose: u8,
 
     /// Suricata cmdline options
     #[clap(short='o', long, value_delimiter = ' ', num_args = 1..)]
