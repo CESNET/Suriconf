@@ -4,7 +4,7 @@
 [![Rust](https://img.shields.io/badge/rust-1.88+-orange.svg)](https://rustup.rs/)
 [![Bachelor's Thesis](https://img.shields.io/badge/thesis-completed-success)](https://www.vut.cz/studenti/zav-prace/detail/170986)
 
-Suriconf is an automated configuration assistant for [Suricata](https://github.com/OISF/suricata). It analyzes network traffic and system resources to optimize Suricata's configuration through a modular approach. Each module uses mathematical methods and performance metrics to configure specific Suricata components. Testing showed Suriconf v1.1.0-dev.3 successfully configured Suricata in 80.8% of test cases with [rules](https://community.emergingthreats.net/).
+Suriconf is an automated configuration assistant for [Suricata](https://github.com/OISF/suricata). It analyzes network traffic and system resources to optimize Suricata's configuration through a modular approach. Each module uses mathematical methods and performance metrics to configure specific Suricata components. In testing, Suriconf v1.0.0-dev successfully configured Suricata in 80.8% of test cases using the [Emerging Threats rules](https://community.emergingthreats.net/). The traffic was simulated by [TRex](https://trex-tgn.cisco.com/) from a modified traffic profile built from real captured traffic. In tests on real-time traffic with the same rules, Suriconf v1.1.0-dev.2 reached 90.91%.
 
 ## Contents
 
@@ -43,7 +43,17 @@ The following tools must be installed, and their paths must be accessible and sp
 
 ### System 
 
-Suriconf v1.1.0-dev.3 requires the network interface to be bound to a specific NUMA node. 
+### NUMA node of the network interface
+
+It is highly recommended that the network interface is attached to a specific NUMA node. Suriconf then places the Suricata worker threads on the CPUs of that node. The node is determined by the PCIe slot of the NIC and cannot be changed in software.
+
+Check the NUMA node of the interface:
+
+```bash
+cat /sys/class/net/eth0/device/numa_node
+```
+
+A value of 0, 1, ... is the NUMA node number. -1 means the system reports no NUMA node for the interface (for example on a single-node machine or with a virtual NIC). Suriconf then ignores NUMA when assigning CPUs and logs a warning.
 
 ### Suricata configuration file
 
