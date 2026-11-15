@@ -16,6 +16,7 @@ use suriconf::json::Preconfiguration;
 use suriconf::query::Resources;
 use suriconf::structures::{CreatedLogs, JsonVar, SuricataAgain};
 use suriconf::suricata;
+use suriconf::suricata_tun;
 use suriconf::yaml;
 use suriconf::yaml::Suriconf;
 
@@ -72,7 +73,7 @@ fn main() -> Result<()> {
 
     let system_time = SystemTime::now();
     let datetime: DateTime<Utc> = system_time.into();
-    yaml::check_set_cpu_affinity(&mut suricata_string, &suriconf, &mut json_var, &datetime)
+    suricata_tun::check_set_cpu_affinity(&mut suricata_string, &suriconf, &mut json_var, &datetime)
         .map_err(anyhow::Error::msg)
         .context("Failed to set CPU affinity in the Suricata config.")?;
 
