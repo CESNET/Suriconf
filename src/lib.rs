@@ -19,6 +19,7 @@ mods!(
     argument,
     structures,
     yaml,
+    suricata_tun,
     suricata,
     json,
     memory_usage,
