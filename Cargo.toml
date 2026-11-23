@@ -6,7 +6,6 @@ authors = ["Eliška Červinková <eliska.cervinkova@cesnet.cz>"]
 license = "BSD-3-Clause"
 description = "A tool for automating Suricata setup and configuration."
 readme = "README.md"
-homepage = "https://github.com/CESNET/Suriconf"
 repository = "https://github.com/CESNET/Suriconf"
 keywords = ["cli", "configuration", "suricata", "suriconf"]
 categories = ["command-line-utilities"]
