@@ -100,7 +100,6 @@ pub enum Commands {
     },
 
     /// Generate Suriconf configuration file
-
     Init {
         /// Output path (default: ./suriconf.yaml)
         #[arg(short, long, default_value = "./suriconf.yaml")]

@@ -15,10 +15,8 @@ use suriconf::config_gen::init;
 use suriconf::json::Preconfiguration;
 use suriconf::query::Resources;
 use suriconf::structures::{CreatedLogs, JsonVar, SuricataAgain};
-use suriconf::suricata;
-use suriconf::suricata_tun;
-use suriconf::yaml;
 use suriconf::yaml::Suriconf;
+use suriconf::{suricata, suricata_tun, yaml};
 
 #[allow(unused_variables)]
 fn main() -> Result<()> {
