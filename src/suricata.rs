@@ -6,28 +6,32 @@ SPDX-License-Identifier: BSD-3-Clause
 This file executes Suricata.
 */
 
-const PIDFILE: &str = "/var/run/suriconf_suricata.pid"; 
+const PIDFILE: &str = "/var/run/suriconf_suricata.pid";
 
-use std::process::{Child, Command};
-use crate::yaml::{emergency_check_memcap, Suriconf};
+use crate::json::{CpuThread, check_emergency};
+use crate::structures::{CaptureMode, CreatedLogs, Modules, SuricataAgain, SystemVar, Thread};
+use crate::yaml::{Suriconf, emergency_check_memcap};
 use crate::{FLOW_WINDOW, MIN_RUN};
-use crate::json::{check_emergency, CpuThread};
-use crate::structures::{Thread, SystemVar, CreatedLogs, CaptureMode, SuricataAgain, Modules};
+use crossbeam_channel::{Receiver, bounded, select, tick};
 use is_executable::IsExecutable;
-use std::time::Duration;
-use crossbeam_channel::{bounded, select, tick, Receiver};
-use std::process::Stdio;
-use std::io::{BufRead, BufReader};
-use std::{fs, thread};
-use procfs::process::{Process};
+use procfs::process::Process;
 use signal_hook::consts::SIGINT;
 use signal_hook::iterator::Signals;
-use std::path::{PathBuf};
-use std::sync::{Arc, Mutex};
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::io;
+use std::io::{BufRead, BufReader};
+use std::path::PathBuf;
+use std::process::Stdio;
+use std::process::{Child, Command};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
+use std::{fs, thread};
 
-pub fn execute_suricata<'a>(suriconf: &Suriconf, logs: &mut CreatedLogs, options: &Vec<String>) -> Option<(SystemVar, SuricataAgain)> {
+pub fn execute_suricata<'a>(
+    suriconf: &Suriconf,
+    logs: &mut CreatedLogs,
+    options: &Vec<String>,
+) -> Option<(SystemVar, SuricataAgain)> {
     let sys = Arc::new(Mutex::new(SystemVar::default()));
     let sys_thread1 = Arc::clone(&sys);
     let sys_thread2 = Arc::clone(&sys);
@@ -51,18 +55,14 @@ pub fn execute_suricata<'a>(suriconf: &Suriconf, logs: &mut CreatedLogs, options
     get_capture_mode(suriconf, &mut vec_of_sur_cmd);
 
     if cfg!(target_os = "windows") {
-       todo!()
+        todo!()
     } else {
         if !suriconf.suricata_bin.is_executable() {
             panic!("Suricata is not executable.");
         }
 
         let full_path = suriconf.suricata_bin.to_str()?;
-        let mut args = vec![
-            full_path,
-            "-c",
-            &logs.suri_configuration.to_str()?
-        ];
+        let mut args = vec![full_path, "-c", &logs.suri_configuration.to_str()?];
 
         args.extend(vec_of_sur_cmd.iter().map(|s| s.as_str()));
         args.extend(options.iter().map(|s| s.as_str()));
@@ -77,12 +77,12 @@ pub fn execute_suricata<'a>(suriconf: &Suriconf, logs: &mut CreatedLogs, options
         let ctrl_c_events_thread2 = ctrl_c_events.clone();
 
         let mut child = Command::new("sudo")
-        .arg("-n")
-        .args(args)
-        .stdout(Stdio::null())
-        .stderr(Stdio::piped())
-        .spawn()
-        .expect("Failed to execute process.");
+            .arg("-n")
+            .args(args)
+            .stdout(Stdio::null())
+            .stderr(Stdio::piped())
+            .spawn()
+            .expect("Failed to execute process.");
 
         let stderr = child.stderr.take().expect("Failed to open stderr");
         thread::spawn(move || {
@@ -108,7 +108,6 @@ pub fn execute_suricata<'a>(suriconf: &Suriconf, logs: &mut CreatedLogs, options
         let ticks_thread2 = tick(Duration::from_millis(100));
         let cpu_usage_ticks = tick(Duration::from_secs(FLOW_WINDOW));
         let nic_usage_ticks = tick(Duration::from_secs(FLOW_WINDOW));
-
 
         let interface = suriconf.interface.clone();
         let ethtool = suriconf.ethtool_bin.clone();
@@ -137,7 +136,9 @@ pub fn execute_suricata<'a>(suriconf: &Suriconf, logs: &mut CreatedLogs, options
 
         let nic_thread = thread::spawn(move || {
             let interface_str = interface.as_str();
-            let ethtool_str = ethtool.to_str().expect("Unable to get Ethtool path as str.");
+            let ethtool_str = ethtool
+                .to_str()
+                .expect("Unable to get Ethtool path as str.");
             loop {
                 select! {
                  recv(nic_usage_ticks) -> _ => {
@@ -198,8 +199,8 @@ pub fn execute_suricata<'a>(suriconf: &Suriconf, logs: &mut CreatedLogs, options
                 }
             }
         }
-    cpu_usage_thread.join().expect("Cpu_usage_thread panic.");
-    nic_thread.join().expect("Nic_thread panic.");
+        cpu_usage_thread.join().expect("Cpu_usage_thread panic.");
+        nic_thread.join().expect("Nic_thread panic.");
     }
 
     let sys = Arc::try_unwrap(sys)
@@ -211,11 +212,14 @@ pub fn execute_suricata<'a>(suriconf: &Suriconf, logs: &mut CreatedLogs, options
 }
 
 pub fn get_capture_mode(suriconf: &Suriconf, vec_of_sur_cmd: &mut Vec<String>) {
-    vec_of_sur_cmd.push(
-        match suriconf.capture_mode {
-            CaptureMode::AF_PACKET => {format!("--af-packet={}", suriconf.interface)},
-            CaptureMode::DPDK => {panic!("NOT IMPLEMENTED")}
-        });
+    vec_of_sur_cmd.push(match suriconf.capture_mode {
+        CaptureMode::AF_PACKET => {
+            format!("--af-packet={}", suriconf.interface)
+        }
+        CaptureMode::DPDK => {
+            panic!("NOT IMPLEMENTED")
+        }
+    });
 }
 
 pub fn set_log_dir(suriconf: &Suriconf, vec_of_sur_cmd: &mut Vec<String>) {
@@ -244,67 +248,80 @@ pub fn set_pid_file(vec_of_sur_cmd: &mut Vec<String>) {
 }
 
 pub fn get_cpu_usage(sys: &mut SystemVar) {
-        sys.sys.refresh_cpu_usage();
+    sys.sys.refresh_cpu_usage();
 
-        for cpu in sys.sys.cpus() {
-            let core_id: u32 = cpu.name()[3..].parse().expect("Unable to get cpu name.");
-            if let Some (thread) = sys.threads.iter_mut().find(|t| t.core_id == core_id){
-                thread.cpu_usage.push(cpu.cpu_usage())
-            }
-            else {
-                sys.threads.push(Thread {name: vec![], core_id, cpu_usage: vec![cpu.cpu_usage()]});
-            }
+    for cpu in sys.sys.cpus() {
+        let core_id: u32 = cpu.name()[3..].parse().expect("Unable to get cpu name.");
+        if let Some(thread) = sys.threads.iter_mut().find(|t| t.core_id == core_id) {
+            thread.cpu_usage.push(cpu.cpu_usage())
+        } else {
+            sys.threads.push(Thread {
+                name: vec![],
+                core_id,
+                cpu_usage: vec![cpu.cpu_usage()],
+            });
         }
+    }
 }
 
 pub fn get_ethtool_stats(sys: &mut SystemVar, interface: &str, ethtool: &str) {
-        let mut rx_dropped: u64 = 0;
-        let mut rx_dropped_nic: u64 = 0;
+    let mut rx_dropped: u64 = 0;
+    let mut rx_dropped_nic: u64 = 0;
 
-        let output = Command::new("sudo")
-            .arg(&ethtool)
-            .arg("-S")
-            .arg(&interface)
-            .output()
-            .expect("Failed to execute ethtool");
+    let output = Command::new("sudo")
+        .arg(&ethtool)
+        .arg("-S")
+        .arg(&interface)
+        .output()
+        .expect("Failed to execute ethtool");
 
-        if output.status.success() {
-            let stdout = String::from_utf8_lossy(&output.stdout);
-            rx_dropped = stdout.lines()
-                .find(|line| line.contains("rx_dropped"))
-                .and_then(|line| line.split_whitespace().nth(1))
-                .unwrap_or("0")
-                .parse::<u64>()
-                .unwrap_or(0);
-        } else {
-            rx_dropped = 0;
-        }
+    if output.status.success() {
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        rx_dropped = stdout
+            .lines()
+            .find(|line| line.contains("rx_dropped"))
+            .and_then(|line| line.split_whitespace().nth(1))
+            .unwrap_or("0")
+            .parse::<u64>()
+            .unwrap_or(0);
+    } else {
+        rx_dropped = 0;
+    }
 
-        if let Some(rx_dropped_stat) = sys.ethtool_stat.iter_mut().find(|t| t.name == "rx_dropped") {
-            rx_dropped_stat.value.push(rx_dropped);
-        }
-        else {
-            sys.ethtool_stat.push(CpuThread {name: "rx_dropped".to_string(), value: vec![rx_dropped] })
-        }
+    if let Some(rx_dropped_stat) = sys.ethtool_stat.iter_mut().find(|t| t.name == "rx_dropped") {
+        rx_dropped_stat.value.push(rx_dropped);
+    } else {
+        sys.ethtool_stat.push(CpuThread {
+            name: "rx_dropped".to_string(),
+            value: vec![rx_dropped],
+        })
+    }
 
-        if output.status.success() {
-            let stdout = String::from_utf8_lossy(&output.stdout);
-            rx_dropped_nic = stdout.lines()
-                .find(|line| line.contains("rx_dropped_nic"))
-                .and_then(|line| line.split_whitespace().nth(1))
-                .unwrap_or("0")
-                .parse::<u64>()
-                .unwrap_or(0);
-        } else {
-            rx_dropped_nic = 0;
-        }
+    if output.status.success() {
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        rx_dropped_nic = stdout
+            .lines()
+            .find(|line| line.contains("rx_dropped_nic"))
+            .and_then(|line| line.split_whitespace().nth(1))
+            .unwrap_or("0")
+            .parse::<u64>()
+            .unwrap_or(0);
+    } else {
+        rx_dropped_nic = 0;
+    }
 
-        if let Some(rx_dropped_nic_stat) = sys.ethtool_stat.iter_mut().find(|t| t.name == "rx_dropped_nic") {
-            rx_dropped_nic_stat.value.push(rx_dropped_nic);
-        }
-        else {
-            sys.ethtool_stat.push(CpuThread {name: "rx_dropped_nic".to_string(), value: vec![rx_dropped_nic] })
-        }
+    if let Some(rx_dropped_nic_stat) = sys
+        .ethtool_stat
+        .iter_mut()
+        .find(|t| t.name == "rx_dropped_nic")
+    {
+        rx_dropped_nic_stat.value.push(rx_dropped_nic);
+    } else {
+        sys.ethtool_stat.push(CpuThread {
+            name: "rx_dropped_nic".to_string(),
+            value: vec![rx_dropped_nic],
+        })
+    }
 }
 
 pub fn get_workers(sys: &mut SystemVar) -> u64 {
@@ -333,7 +350,9 @@ fn wait_on_suricata_start(socket: &PathBuf, child: &mut Child) -> Result<i32, St
         }
 
         if let Some(status) = child.try_wait().expect("Unable to get Suricata status.") {
-            return Err(format!("Suricata exited during startup with status: {status}."));
+            return Err(format!(
+                "Suricata exited during startup with status: {status}."
+            ));
         }
 
         if suri_pid.is_some() {
@@ -365,7 +384,9 @@ fn wait_on_suricata_start(socket: &PathBuf, child: &mut Child) -> Result<i32, St
         }
 
         if let Some(status) = child.try_wait().expect("Unable to get Suricata status.") {
-            return Err(format!("Suricata exited during startup with status: {status}."));
+            return Err(format!(
+                "Suricata exited during startup with status: {status}."
+            ));
         }
 
         thread::sleep(Duration::from_millis(1000));
@@ -374,14 +395,20 @@ fn wait_on_suricata_start(socket: &PathBuf, child: &mut Child) -> Result<i32, St
     Err("Suricata could not start.".into())
 }
 
-
 fn get_cores_with_threads(suri_pid: i32, sys: &mut SystemVar) {
     let proc = Process::new(suri_pid).expect("Unable to create process.");
     let tasks = proc.tasks().expect("Unable to get process tasks.");
 
     for task in tasks {
-        let stat = task.expect("Unable to get task.").stat().expect("Unable to get stat.");
-        if let Some (thread) = sys.threads.iter_mut().find(|t| t.core_id ==  stat.processor.expect("Unable to get specific core.") as u32) {
+        let stat = task
+            .expect("Unable to get task.")
+            .stat()
+            .expect("Unable to get stat.");
+        if let Some(thread) = sys
+            .threads
+            .iter_mut()
+            .find(|t| t.core_id == stat.processor.expect("Unable to get specific core.") as u32)
+        {
             thread.name.push(stat.comm);
         }
     }
@@ -391,10 +418,10 @@ pub fn kill_suricata(child: &mut Child) {
     let end_timeout = Duration::from_secs(300);
     let pid = child.id();
     let mut output = Command::new("sudo")
-    .arg("pkill")
-    .arg("Suricata-Main")
-    .status()
-    .expect("Unable to pkill Suricata-Main (SIGTERM).");
+        .arg("pkill")
+        .arg("Suricata-Main")
+        .status()
+        .expect("Unable to pkill Suricata-Main (SIGTERM).");
 
     if !output.success() {
         panic!("Process failed.");
@@ -407,7 +434,7 @@ pub fn kill_suricata(child: &mut Child) {
             break;
         }
 
-        if end_start.elapsed() >=  end_timeout {
+        if end_start.elapsed() >= end_timeout {
             log::debug!("Still alive, killing pid {}.", pid);
             output = Command::new("sudo")
                 .arg("pkill")
@@ -419,7 +446,7 @@ pub fn kill_suricata(child: &mut Child) {
             if !output.success() {
                 panic!("Process failed.");
             }
-            break
+            break;
         }
         thread::sleep(Duration::from_millis(100));
     }
@@ -439,7 +466,9 @@ pub fn ctrl_channel() -> anyhow::Result<Receiver<()>> {
 
 pub fn check_min_suricata_runtime_for_modules(suriconf: &Suriconf) {
     if suriconf.modules.contains(&Modules::FlowThreads) && MIN_RUN > suriconf.preconf_time {
-            panic!("Unable to execute Suricata and have enough samples from preconfiguration, \
-            FlowThreads module needs at least 6 minutes.")
+        panic!(
+            "Unable to execute Suricata and have enough samples from preconfiguration, \
+            FlowThreads module needs at least 6 minutes."
+        )
     }
 }
