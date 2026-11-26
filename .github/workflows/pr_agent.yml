@@ -26,9 +26,9 @@ jobs:
           config.model: ${{ secrets.EINFRA_MODEL }}
           config.model_weak: ${{ secrets.EINFRA_MODEL_WEAK }}
           config.custom_model_max_tokens: "256000"
-          config.max_model_tokens: "64000"
+          config.max_model_tokens: "256000"
           config.fallback_models: ${{ secrets.EINFRA_FALLBACK_MODELS }}
-          config.ai_timeout: "300"
+          config.ai_timeout: "600"
           litellm.custom_llm_provider: "openai"
           litellm.force_streaming_custom_llm_provider: "openai"
           litellm.force_streaming_api_base_substrings: '["http"]'
