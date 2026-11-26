@@ -88,10 +88,7 @@ The entire configuration is defined in a YAML file, typically named `suriconf.ya
 The `modules` section defines all available modules. For a detailed description of each module, see [MODULES.md](MODULES.md). Each module can be enabled or disabled using the `enabled` parameter (`true` / `false`).
 
 > [!NOTE]
-> For disabled modules, Suriconf uses the default configuration from the Suricata configuration file.
-
-> [!WARNING]
-> When disabling `cpu_affinity` module, you must define interface-specific CPU affinity section in default Suricata configuration file.
+> For disabled modules, Suriconf falls back to the default settings in the Suricata configuration file. Make sure those sections are valid and won't become a performance bottleneck.
 
 > [!WARNING]
 > Using the `cpu_affinity` module, Suriconf supports only a single interface.
