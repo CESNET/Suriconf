@@ -26,6 +26,7 @@ jobs:
           config.model: ${{ secrets.EINFRA_MODEL }}
           config.model_weak: ${{ secrets.EINFRA_MODEL_WEAK }}
           config.custom_model_max_tokens: "256000"
+          config.max_model_tokens: "64000"
           config.fallback_models: ${{ secrets.EINFRA_FALLBACK_MODELS }}
           config.ai_timeout: "300"
           litellm.custom_llm_provider: "openai"
@@ -36,4 +37,5 @@ jobs:
           github_action_config.auto_improve: "true"
           pr_reviewer.num_max_findings: "5"
           pr_code_suggestions.num_code_suggestions_per_chunk: "5"
+          pr_code_suggestions.max_number_of_calls: "6"
           pr_code_suggestions.demand_code_suggestions_self_review: "true"
