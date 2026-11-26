@@ -65,14 +65,11 @@ impl Modules {
     }
 }
 
-#[derive(Debug, Clone, ValueEnum)]
+#[derive(Debug, Clone, ValueEnum, Default)]
 pub enum CaptureMode {
     DPDK,
+    #[default]
     AF_PACKET
-}
-
-impl Default for CaptureMode {
-    fn default() -> Self { CaptureMode::AF_PACKET }
 }
 
 #[derive(Debug, Default)]
@@ -102,14 +99,11 @@ impl Change {
     }
 }
 
-#[derive(PartialEq, Eq, Debug)]
+#[derive(PartialEq, Eq, Debug, Default)]
 pub enum SuricataAgain {
+    #[default]
     Done,
     RunAgain
-}
-
-impl  Default for SuricataAgain {
-    fn default() -> Self { SuricataAgain::Done }
 }
 
 #[derive(PartialEq, Debug)]
@@ -258,7 +252,7 @@ pub enum Keys { // JUST FOR FLOW
     ethtool,
     ip,
     ethtool_stat,
-    af_packet_interface_threads
+    af_packet_interface_threads,
 }
 
 impl Keys {
@@ -529,27 +523,17 @@ impl TrasportProtocols {
     }
 }
 
-#[derive(Debug, Clone, ValueEnum)]
+#[derive(Debug, Clone, ValueEnum, Default)]
 pub enum Mode {
     AskModify,
     ForceModify,
+    #[default]
     Suggestion
 }
 
-impl Default for Mode {
-    fn default() -> Self {
-        Mode::Suggestion
-    }
-}
-
-#[derive(Debug, Clone, ValueEnum)]
+#[derive(Debug, Clone, ValueEnum, Default)]
 pub enum Analysis {
+    #[default]
     Static,
     Dynamic
-}
-
-impl Default for Analysis {
-    fn default() -> Self {
-        Analysis::Static
-    }
 }
