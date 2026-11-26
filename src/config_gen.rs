@@ -1,8 +1,8 @@
 use std::fs;
 use std::io;
-use std::path::{PathBuf};
+use std::path::PathBuf;
 
-use crate::{DEFAULT_CONFIG};
+use crate::DEFAULT_CONFIG;
 
 pub fn init(output: &PathBuf, force: bool) -> io::Result<()> {
     if output.exists() && !force {

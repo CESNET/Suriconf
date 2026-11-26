@@ -8,28 +8,28 @@ This file contains Suriconf structures.
 
 use std::path::PathBuf;
 extern crate chrono;
-use chrono::offset::Utc;
+use crate::cpu_affinity::CpuAffinityModule;
+use crate::flow::FlowModule;
+use crate::flow_threads::FlowThreadsModule;
+use crate::json::CpuThread;
+use crate::memory_usage::MemoryModule;
+use crate::module::Module;
 use chrono::DateTime;
-use std::fs;
+use chrono::offset::Utc;
+use clap::ValueEnum;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::{BTreeMap, HashMap};
+use std::fs;
 use strum_macros::{Display, EnumIter};
 use sysinfo::System;
-use crate::flow::FlowModule;
-use clap::{ValueEnum};
-use crate::flow_threads::FlowThreadsModule;
-use crate::module::Module;
-use crate::memory_usage::MemoryModule;
-use crate::cpu_affinity::CpuAffinityModule;
-use crate::json::CpuThread;
 
 pub enum Reason {
     timeout,
     shutdown,
     forced,
     emergency,
-    tcp_reuse
+    tcp_reuse,
 }
 
 impl Reason {
@@ -40,7 +40,7 @@ impl Reason {
             "forced" => Reason::forced,
             "emergency" => Reason::emergency,
             "tcp_reuse" => Reason::tcp_reuse,
-            _ => panic!("Unable to convert key string slice.")
+            _ => panic!("Unable to convert key string slice."),
         }
     }
 }
@@ -50,7 +50,7 @@ pub enum Modules {
     FlowThreads,
     CpuAffinity,
     Flow,
-    MemoryModule
+    MemoryModule,
 }
 
 impl Modules {
@@ -60,7 +60,7 @@ impl Modules {
             "cpu_affinity" => Modules::CpuAffinity,
             "flow" => Modules::Flow,
             "memory_usage" => Modules::MemoryModule,
-            _ => panic!("Unable to convert key string slice.")
+            _ => panic!("Unable to convert key string slice."),
         }
     }
 }
@@ -69,7 +69,7 @@ impl Modules {
 pub enum CaptureMode {
     DPDK,
     #[default]
-    AF_PACKET
+    AF_PACKET,
 }
 
 #[derive(Debug, Default)]
@@ -79,23 +79,35 @@ pub struct Flow {
 }
 
 #[derive(Debug, PartialEq)]
-pub struct Answer<'a>{
+pub struct Answer<'a> {
     pub key: &'a Keys,
-    pub value: &'a Value
+    pub value: &'a Value,
 }
 
 pub struct MemcapChange {
     pub keys: Keys,
-    pub value: u64
+    pub value: u64,
 }
 
 pub struct Change {
     pub keys: Keys,
-    pub value: Value
+    pub value: Value,
 }
 impl Change {
     pub fn collect_changes(table: &HashMap<Keys, Value>) -> Vec<Change> {
-        table.iter().filter_map(|(k, v)| { if !v.is_null() { Some(Change { keys: *k, value: v.clone() }) } else { None } }).collect()
+        table
+            .iter()
+            .filter_map(|(k, v)| {
+                if !v.is_null() {
+                    Some(Change {
+                        keys: *k,
+                        value: v.clone(),
+                    })
+                } else {
+                    None
+                }
+            })
+            .collect()
     }
 }
 
@@ -103,33 +115,33 @@ impl Change {
 pub enum SuricataAgain {
     #[default]
     Done,
-    RunAgain
+    RunAgain,
 }
 
 #[derive(PartialEq, Debug)]
-pub enum RobRegression{
+pub enum RobRegression {
     Huber,
-    TheilSen
+    TheilSen,
 }
 
 pub enum ModuleResult {
     Up,
     Ok,
-    Down
+    Down,
 }
 
 #[derive(Default, Debug)]
 pub struct SystemVar {
     pub sys: System,
-    pub threads: Vec<Thread>, 
-    pub ethtool_stat: Vec<CpuThread>
+    pub threads: Vec<Thread>,
+    pub ethtool_stat: Vec<CpuThread>,
 }
 
 #[derive(Deserialize, Serialize, PartialEq, Default, Debug)]
 pub struct Thread {
     pub name: Vec<String>,
     pub core_id: u32,
-    pub cpu_usage: Vec<f32>
+    pub cpu_usage: Vec<f32>,
 }
 
 #[derive(Serialize, Debug, Default)]
@@ -140,11 +152,11 @@ pub struct Threads {
 
 #[derive(Debug, Default)]
 pub struct JsonVar {
-    pub var_index: HashMap<Keys, Value>
+    pub var_index: HashMap<Keys, Value>,
 }
 pub fn create_module(module: &Modules, analysis: &Analysis, debug: bool) -> Box<dyn Module> {
     match module {
-        Modules::FlowThreads =>  Box::new(FlowThreadsModule::new(analysis, debug)),
+        Modules::FlowThreads => Box::new(FlowThreadsModule::new(analysis, debug)),
         Modules::Flow => Box::new(FlowModule::new(analysis, debug)),
         Modules::MemoryModule => Box::new(MemoryModule::new(analysis, debug)),
         Modules::CpuAffinity => Box::new(CpuAffinityModule::new(analysis, debug)),
@@ -153,7 +165,8 @@ pub fn create_module(module: &Modules, analysis: &Analysis, debug: bool) -> Box<
 }
 
 #[derive(Debug, Hash, Eq, PartialEq, Copy, Clone)]
-pub enum Keys { // JUST FOR FLOW
+pub enum Keys {
+    // JUST FOR FLOW
     max_memory_usage,
     wrk_cpu_set,
     max_cpu_usage_vec,
@@ -260,7 +273,7 @@ impl Keys {
         match key_str {
             "max_memory_usage" => Keys::max_memory_usage,
             "wrk_cpu_set" => Keys::wrk_cpu_set,
-            "max_cpu_usage_vec" => Keys::max_cpu_usage_vec, 
+            "max_cpu_usage_vec" => Keys::max_cpu_usage_vec,
             "threads_stat" => Keys::threads_stat,
             "uptime" => Keys::uptime,
             "datetime" => Keys::datetime,
@@ -284,7 +297,7 @@ impl Keys {
             "flow_memuse" => Keys::flow_memuse,
             "flow_active" => Keys::flow_active,
             "flow_hashsize" => Keys::flow_hashsize,
-            "flow_prealloc"=> Keys::flow_prealloc,
+            "flow_prealloc" => Keys::flow_prealloc,
             "flow_managers" => Keys::flow_managers,
             "flow_recyclers" => Keys::flow_recyclers,
             "flow_set" => Keys::flow_set,
@@ -337,7 +350,7 @@ impl Keys {
             "defrag_hashsize" => Keys::defrag_hashsize,
             "defrag_trackers" => Keys::defrag_trackers,
             "defrag_max_frags" => Keys::defrag_max_frags,
-            "defrag_prealloc"=> Keys::defrag_prealloc,
+            "defrag_prealloc" => Keys::defrag_prealloc,
             "default_packet_size" => Keys::default_packet_size,
             "stream_prealloc" => Keys::stream_prealloc,
             "reassembly_prealloc" => Keys::reassembly_prealloc,
@@ -357,17 +370,16 @@ impl Keys {
             "ip" => Keys::ip,
             "ethtool_stat" => Keys::ethtool_stat,
             "af_packet_interface_threads" => Keys::af_packet_interface_threads,
-            _ => panic!("Unable to convert key string slice.")
+            _ => panic!("Unable to convert key string slice."),
         }
     }
-
 }
 
-#[derive(EnumIter, Debug, Display,PartialEq, Eq, Copy, Clone)]
+#[derive(EnumIter, Debug, Display, PartialEq, Eq, Copy, Clone)]
 pub enum FileNames {
     suricata,
     suriconf,
-    preconf
+    preconf,
 }
 
 impl FileNames {
@@ -394,28 +406,34 @@ impl CreatedLogs {
             fs::create_dir_all(&suri_configuration).expect("Unable to create tmp directory.");
         }
 
-        let mut stats =log_dir.clone();
+        let mut stats = log_dir.clone();
         stats.push("stats.json");
 
-        let mut flows =log_dir.clone();
+        let mut flows = log_dir.clone();
         flows.push("flows.json");
 
         let mut preconfiguration = PathBuf::from("./tmp");
 
-        suri_configuration.push(format!("suricata{}.yaml", datetime.format("-%Y-%m-%d-%H:%M:%S")));
-        preconfiguration.push(format!("preconfiguration{}.json",datetime.format("-%Y-%m-%d-%H:%M:%S")));
+        suri_configuration.push(format!(
+            "suricata{}.yaml",
+            datetime.format("-%Y-%m-%d-%H:%M:%S")
+        ));
+        preconfiguration.push(format!(
+            "preconfiguration{}.json",
+            datetime.format("-%Y-%m-%d-%H:%M:%S")
+        ));
         Self {
             suri_configuration,
             stats,
             flows,
-            preconfiguration
+            preconfiguration,
         }
     }
 }
 #[derive(Eq, Hash, PartialEq, Serialize, Debug)]
 pub enum Protocols {
     Transport(TrasportProtocols),
-    AppLayer(AppLayerProtocols)
+    AppLayer(AppLayerProtocols),
 }
 
 #[derive(Eq, Hash, PartialEq, Serialize, Debug)]
@@ -458,7 +476,7 @@ pub enum AppLayerProtocols {
     KRB5_UDP,
     SIP_UDP,
     LDAP_UDP,
-    DNS
+    DNS,
 }
 
 impl AppLayerProtocols {
@@ -510,7 +528,7 @@ impl AppLayerProtocols {
 #[derive(Eq, Hash, PartialEq, Serialize, Debug)]
 pub enum TrasportProtocols {
     TCP,
-    UDP
+    UDP,
 }
 
 impl TrasportProtocols {
@@ -518,7 +536,7 @@ impl TrasportProtocols {
         match s {
             "tcp" => Some(Self::TCP),
             "udp" => Some(Self::UDP),
-            _ => None
+            _ => None,
         }
     }
 }
@@ -528,12 +546,12 @@ pub enum Mode {
     AskModify,
     ForceModify,
     #[default]
-    Suggestion
+    Suggestion,
 }
 
 #[derive(Debug, Clone, ValueEnum, Default)]
 pub enum Analysis {
     #[default]
     Static,
-    Dynamic
+    Dynamic,
 }
