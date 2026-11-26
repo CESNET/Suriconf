@@ -9,28 +9,20 @@ This file defines constats for Suriconf.
 use crate::memory_usage::{DefaultPacketSize, MaxPendingPackets};
 use crate::structures::RobRegression;
 
-macro_rules! mods {
-    ($($name:ident),*) => {
-        $(pub mod $name;)*
-    };
-}
-
-mods!(
-    argument,
-    structures,
-    yaml,
-    suricata_tun,
-    suricata,
-    json,
-    memory_usage,
-    query,
-    flow,
-    flow_threads,
-    regression,
-    module,
-    cpu_affinity,
-    config_gen
-);
+pub mod argument;
+pub mod config_gen;
+pub mod cpu_affinity;
+pub mod flow;
+pub mod flow_threads;
+pub mod json;
+pub mod memory_usage;
+pub mod module;
+pub mod query;
+pub mod regression;
+pub mod structures;
+pub mod suricata;
+pub mod suricata_tun;
+pub mod yaml;
 
 const DEFAULT_CONFIG: &str = include_str!("../suriconf.yaml");
 
