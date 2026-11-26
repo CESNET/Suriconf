@@ -16,54 +16,60 @@ use crate::structures::{CaptureMode, JsonVar, Keys, Modules};
 use crate::yaml::Suriconf;
 use crate::{MANAGER_START, RECYCLER_START};
 
-#[derive(PartialEq, Eq)]
+#[derive(PartialEq, Eq, Default)]
 enum Interface {
     Specific,
+    #[default]
     Default
 }
 
-impl Default for Interface {
-    fn default() -> Self {
-        Interface::Specific
-    }
-}
-// TODO, for some reason, the interface-specific-worker-cpu-set is not needed (check_for_interface_specific_worker_set_without_cpu_affinity)
 pub fn check_set_cpu_affinity(suricata_string: &mut Value, suriconf: &Suriconf, json_var: &mut JsonVar, datetime: &DateTime<Utc>) -> Result<(), String> {
+    let mgmt_cores = (RECYCLER_START + MANAGER_START) as usize;
+    let available = suriconf.max_cpu_usage_vec.len();
+    let flow_threads = suriconf.modules.contains(&Modules::FlowThreads);
+    let cpu_affinity = suriconf.modules.contains(&Modules::CpuAffinity);
+
+    let required = match (flow_threads, cpu_affinity) {
+        (true, true) => mgmt_cores + 1, // at least one core for worker 
+        (true, false) => mgmt_cores,     
+        (false, true) => 1,              
+        (false, false) => 0,
+    };
+
+    if available < required {
+        return Err(format!("The max_cpu_usage_vec has {available} core(s), but the enabled modules need at least {required}."));
+    }
+
     let mut interface_spec = Interface::default();
 
-    if suriconf.modules.contains(&Modules::FlowThreads) && suriconf.modules.contains(&Modules::CpuAffinity) {
+    if flow_threads && cpu_affinity {
+        interface_spec = Interface::Specific;
         set_threading_section(suricata_string)?;
-        set_management_cpu_set(suricata_string)?;
-        set_worker_cpu_set(suricata_string)?;
+        set_management_section(suricata_string)?;
+        set_worker_section(suricata_string)?;
 
         set_management_set(suricata_string, suriconf)?;
-
-        let edited_max_cpu_usage_vec = suriconf.max_cpu_usage_vec.get((RECYCLER_START+MANAGER_START) as usize..).map(|v| v.to_vec()).ok_or("Unable to parse cpu_set vector.")?;
-
-        set_interface_specific_cpu_set(suricata_string, suriconf, edited_max_cpu_usage_vec, datetime)?;
+        let edited_max_cpu_usage_vec = suriconf.max_cpu_usage_vec.get((RECYCLER_START+MANAGER_START) as usize..)
+        .map(|v| v.to_vec()).ok_or("Unable to parse cpu_set vector.")?;
+        set_interface_specific_section(suricata_string, suriconf, edited_max_cpu_usage_vec, datetime)?;
     }
-    else if suriconf.modules.contains(&Modules::CpuAffinity) {
+    else if cpu_affinity {
         // max_cpu_usage_vec is just for worker threads
+        interface_spec = Interface::Specific;
         set_threading_section(suricata_string)?;
-        set_worker_cpu_set(suricata_string)?;
-        set_interface_specific_cpu_set(suricata_string, suriconf, suriconf.max_cpu_usage_vec.clone(), datetime)?;
+        set_worker_section(suricata_string)?;
+        set_interface_specific_section(suricata_string, suriconf, suriconf.max_cpu_usage_vec.clone(), datetime)?;
     }
-    else if suriconf.modules.contains(&Modules::FlowThreads) {
-        interface_spec = Interface::Default;
+    else if flow_threads {
         // max_cpu_usage_vec is just for management threads
         set_threading_section(suricata_string)?;
-        set_management_cpu_set(suricata_string)?;
+        set_management_section(suricata_string)?;
         set_management_set(suricata_string, suriconf)?;
-
-        check_for_interface_specific_worker_set_without_cpu_affinity(suricata_string, suriconf, datetime)?;
     }
-    else {
-        check_for_interface_specific_worker_set_without_cpu_affinity(suricata_string, suriconf, datetime)?;
-    };
 
     if interface_spec == Interface::Specific {
         let worker_interface_index = get_interface_specific_cpu_set(suricata_string)?
-            .iter().position(|v| v["interface"] == suriconf.interface.as_str()).ok_or("Unable to find interface.")?;
+        .iter().position(|v| v["interface"] == suriconf.interface.as_str()).ok_or("Unable to find interface.")?;
 
         json_var.var_index.insert(
                 Keys::wrk_cpu_set,
@@ -71,6 +77,8 @@ pub fn check_set_cpu_affinity(suricata_string: &mut Value, suriconf: &Suriconf, 
             );
 
         let af_packet_interface_index = get_af_packet(suricata_string)?.iter().position(|v| v["interface"] == suriconf.interface.as_str()).ok_or("Unable to find interface.")?;
+        // @TODO DPDK
+        // let dpdk_interface_index =  
 
         json_var.var_index.insert(
                 Keys::af_packet_interface_threads,
@@ -100,7 +108,7 @@ pub fn set_threading_section(suricata_string: &mut Value) -> Result<(), String> 
             threading.insert(Value::String("set-cpu-affinity".to_string()), Value::String("yes".to_string()));
 
             suricata_string.as_mapping_mut().ok_or("Suricata configuration is not a mapping.")?
-                .insert(Value::String("threading".to_string()), Value::Mapping(threading));
+            .insert(Value::String("threading".to_string()), Value::Mapping(threading));
         }
     }
 
@@ -112,22 +120,22 @@ pub fn set_threading_section(suricata_string: &mut Value) -> Result<(), String> 
         }
         None => {
             suricata_string.as_mapping_mut().ok_or("Suricata configuration is not a mapping.")?
-                .insert(Value::String("runmode".to_string()), Value::String("workers".to_string()));
+            .insert(Value::String("runmode".to_string()), Value::String("workers".to_string()));
         }
     }
     Ok(())
 }
 
-pub fn set_worker_cpu_set(suricata_string: &mut Value) -> Result<(), String> {
+pub fn set_worker_section(suricata_string: &mut Value) -> Result<(), String> {
     let cpu_affinity = get_cpu_affinity(suricata_string)?;
     if cpu_affinity.get("worker-cpu-set").is_none() {
         cpu_affinity.as_mapping_mut().ok_or("Cpu-affinity section is not a mapping.")?
-            .insert(Value::String("worker-cpu-set".to_string()), Value::Mapping(Mapping::new()));
+        .insert(Value::String("worker-cpu-set".to_string()), Value::Mapping(Mapping::new()));
     }
     Ok(())
 }
 
-pub fn set_management_cpu_set(suricata_string: &mut Value) -> Result<(), String> {
+pub fn set_management_section(suricata_string: &mut Value) -> Result<(), String> {
     let cpu_affinity = get_cpu_affinity(suricata_string)?
         .as_mapping_mut().ok_or("Cpu-affinity section is not a mapping.")?;
 
@@ -168,7 +176,9 @@ pub fn get_af_packet(suricata_string: &mut Value) -> Result<&mut Sequence, Strin
     .as_sequence_mut().ok_or("Unable to get af-packet section as sequence.".to_string())
 }
 
-pub fn set_interface_specific_cpu_set(suricata_string: &mut Value, suriconf: &Suriconf, workers: Vec<u64>, datetime: &DateTime<Utc>) -> Result<(), String> {
+// pub fn get_dpdk() -> 
+
+pub fn set_interface_specific_section(suricata_string: &mut Value, suriconf: &Suriconf, workers: Vec<u64>, datetime: &DateTime<Utc>) -> Result<(), String> {
     let worker_set = get_worker_cpu_set(suricata_string)?;
 
     if worker_set.get_mut("interface-specific-cpu-set").is_none() {
@@ -230,14 +240,13 @@ pub fn set_interface_specific_cpu_set(suricata_string: &mut Value, suriconf: &Su
 
     worker_set.push(interface_value);
 
-    set_interface_with_threads(suricata_string, suriconf, workers, datetime);
+    set_interface_section(suricata_string, suriconf, workers, datetime);
     Ok(())
 }
 
 pub fn set_management_set(suricata_string: &mut Value, suriconf: &Suriconf) ->  Result<(), String>  {
     let management_set = get_cpu_affinity(suricata_string)?
-        .get_mut("management-cpu-set").ok_or("Unable to parse management-cpu-set.")?;
-    assert!(suriconf.max_cpu_usage_vec.len() >=  (RECYCLER_START+ MANAGER_START) as usize, "cpu_set vector provides only one core.");
+    .get_mut("management-cpu-set").ok_or("Unable to parse management-cpu-set.")?;
     
     let management_threads: Vec<Value> =suriconf.max_cpu_usage_vec.get(0..(RECYCLER_START+MANAGER_START) as  usize)
     .ok_or("Unable to set manager thread.")?
@@ -245,28 +254,6 @@ pub fn set_management_set(suricata_string: &mut Value, suriconf: &Suriconf) ->  
 
     let cpus = management_set.get_mut("cpu").ok_or("Unable to get cpus for management-cpu-set.")?;
     *cpus = Value::Sequence(management_threads);
-    Ok(())
-}
-
-pub fn check_for_interface_specific_worker_set_without_cpu_affinity(suricata_string: &mut Value, suriconf: &Suriconf, datetime: &DateTime<Utc>) -> Result<(), String> {
-    // if cpu_affinity is disabled, check for interface in interface-specific-cpu-set and that cpu vector in not empty
-    let interfaces = match get_worker_cpu_set(suricata_string)?.get("interface-specific-cpu-set") {
-        Some(interfaces) => interfaces.as_sequence().ok_or("Unable to get interface-specific-cpu-set section as sequence.")?,
-        None => return Err("Unable to get interface-specific-cpu-set section.".to_string()) 
-    };
-    
-    let mut cpus: Vec<u64> = Vec::new();
-    for interface in interfaces {
-        if suriconf.interface == interface.as_mapping().expect("Unable to get mapping for interface.").get("interface").expect("Unable to get interface.").as_str().expect("Unable to get interface as str.") {
-            let cpus_seq: &Vec<Value> = interface.as_mapping().expect("Unable to get mapping for cpu.").get("cpu").expect("Unable to get cpu.").as_sequence().expect("cpu is not a sequence");
-            cpus = cpus_seq.iter().map(|x| x.as_u64().expect("Unable to get cpu as i64.")).collect();
-            break
-        }
-    }
-    if cpus.is_empty() {
-        return Err("The cpu list of the interface is empty or the interface does not exist in interface-specific-cpu-set.".to_string());
-    }
-
     Ok(())
 }
 
@@ -278,9 +265,9 @@ pub fn create_nic_bash_file(datetime: &DateTime<Utc>) -> File {
 
     nic.push(format!("nic_setup{}.sh", datetime.format("-%Y-%m-%d-%H:%M:%S")));
     let mut nic_file = OpenOptions::new().create(true)
-        .write(true).truncate(true).open(nic).expect("Unable to create nic_setup.sh.");
+    .write(true).truncate(true).open(nic).expect("Unable to create nic_setup.sh.");
     writeln!(nic_file, "#!/bin/bash").expect("Unable to write to bash file.");
-    writeln!(nic_file, "set -e").expect("Unable to write to bash file.");;
+    writeln!(nic_file, "set -e").expect("Unable to write to bash file.");
     nic_file
 }
 
@@ -304,6 +291,7 @@ fn run_command_and_write_it_down(cmd: &str, args: &[&str], nic_file: &mut File) 
 }
 
 pub fn dpdk_tuning(interface: &str, threads: u64, nic_file: &mut File) {
+    // @TODO DPDK
     todo!()
 }
 
@@ -311,8 +299,7 @@ pub fn af_packet_tuning(interface: &str, threads: u64, ethtool: &str, ip: &str, 
     run_command_and_write_it_down("sudo", &["sysctl", "-w", "net.core.rmem_max=268435456"], nic_file);
     run_command_and_write_it_down("sudo", &["sysctl", "-w", "net.core.netdev_max_backlog=16384"], nic_file);
 
-    let mut output = run_command_and_write_it_down("sudo", &[format!("{ethtool}").as_str(), "-i", interface], nic_file);
-
+    let mut output: Output = run_command_and_write_it_down("sudo", &[format!("{ethtool}").as_str(), "-i", interface], nic_file);
 
     let mut driver: Option<String> = None;
 
@@ -342,7 +329,6 @@ pub fn af_packet_tuning(interface: &str, threads: u64, ethtool: &str, ip: &str, 
 
     if driver != "mlx5_core" {
         run_command_and_write_it_down("sudo", &[format!("{ethtool}").as_str(), "-K", interface, "ntuple", "on"], nic_file);
-
     }
 
     run_command_and_write_it_down("sudo", &[format!("{ip}").as_str(), "link", "set", format!("{interface}").as_str(), "up"], nic_file);
@@ -494,21 +480,31 @@ pub fn disable_offloading(interface: &str, ethtool: &str, nic_file: &mut File) {
     }
 }
 
-pub fn set_interface_with_threads(suricata_string: &mut Value, suriconf: &Suriconf, mut cpus: Vec<u64>, datetime: &DateTime<Utc>) {
-    let mut found = false;
-
-    let mut nic_file = create_nic_bash_file(datetime);
-    disable_irqbalance(&mut nic_file);
+pub fn create_nic_ethtool<'a>(suriconf: &'a Suriconf, datetime: &DateTime<Utc>) -> (File, &'a str) {
+    let nic_file = create_nic_bash_file(datetime);
     let ethtool = suriconf.ethtool_bin.to_str().expect("Unable to transform path to Ethtool to str.");
-    disable_offloading(&suriconf.interface, ethtool, &mut nic_file);
+    (nic_file, ethtool)
+}
+
+pub fn shrink_cpu_set(suriconf: &Suriconf, cpus: &mut Vec<u64>, ethtool: &str, nic_file: &mut File)  {
+    let shrink = set_rss(&suriconf.interface, cpus.len() as u64, ethtool, nic_file);
+    if shrink != 0 { // remove cpus to match RSS queues
+        cpus.drain(0..shrink as usize);
+    };
+}
+
+pub fn set_interface_section(suricata_string: &mut Value, suriconf: &Suriconf, mut cpus: Vec<u64>, datetime: &DateTime<Utc>) {
+    let mut found = false;
+    let cpu_affinity  = suriconf.modules.contains(&Modules::CpuAffinity);
 
     match suriconf.capture_mode {
         CaptureMode::AF_PACKET => {
-            if suriconf.modules.contains(&Modules::CpuAffinity)  {
-                let shrink = set_rss(&suriconf.interface, cpus.len() as u64, ethtool, &mut nic_file);
-                if shrink != 0 { // remove cpus to match RSS queues
-                 cpus.drain(0..shrink as usize);
-                };
+            if cpu_affinity  {
+                let (mut nic_file, ethtool) = create_nic_ethtool(suriconf, datetime);
+                shrink_cpu_set(suriconf, &mut cpus, ethtool, &mut nic_file);
+                disable_offloading(&suriconf.interface, ethtool, &mut nic_file);
+
+                disable_irqbalance(&mut nic_file);
                 let ip = suriconf.ip_bin.to_str().expect("Unable to transform path to Ip to str.");
                 af_packet_tuning(&suriconf.interface, cpus.len() as u64, ethtool, ip, &mut nic_file);
                 set_hard_irq(&suriconf.interface, &cpus, &mut nic_file);
@@ -568,9 +564,11 @@ pub fn set_interface_with_threads(suricata_string: &mut Value, suriconf: &Surico
             }
         },
         CaptureMode::DPDK => {
-            if suriconf.modules.contains(&Modules::CpuAffinity)  {
-                println!("DPDK");
-                panic!("end")
+            if cpu_affinity  {
+                let (mut nic_file, ethtool) = create_nic_ethtool(suriconf, datetime);
+                shrink_cpu_set(suriconf, &mut cpus, ethtool, &mut nic_file);
+                disable_offloading(&suriconf.interface, ethtool, &mut nic_file);
+                panic!("DPDK not implemented")
             }
 
         }

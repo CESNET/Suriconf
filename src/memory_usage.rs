@@ -188,9 +188,10 @@ impl Module for MemoryModule {
     }
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, Default)]
 pub enum SetTable {
     Set,
+    #[default]
     Default
 }
 
@@ -201,12 +202,6 @@ pub enum HashType {
     Defrag,
     Stream,
     Reassembly
-}
-
-impl Default for SetTable {
-    fn default() -> Self {
-        SetTable::Default
-    }
 }
 
 impl MemoryModule {
