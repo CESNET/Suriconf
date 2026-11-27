@@ -6,27 +6,26 @@ SPDX-License-Identifier: BSD-3-Clause
 This file represents a CPU affinity module.
 */
 
-use chrono::{DateTime, Utc};
-use std::collections::{HashMap, HashSet};
-use serde_json::{Value, Number};
-use std::fs;
 use crate::json::CpuThread;
 use crate::module::Module;
 use crate::structures::{Analysis, Answer, Change, Keys};
 use crate::{CPU_MULTIPLIER, CPU_USAGE};
-use std::process::Command;
-use itertools::{izip};
+use crate::{suricata_tun, yaml};
+use chrono::{DateTime, Utc};
+use itertools::izip;
+use serde_json::{Number, Value};
+use std::collections::{HashMap, HashSet};
+use std::fs;
 use std::fs::File;
-use crate::yaml;
+use std::process::Command;
 
 #[derive(Debug)]
 pub struct CpuAffinityModule {
     pub questions: HashMap<Keys, Value>, // changed
-    pub debug: bool
+    pub debug: bool,
 }
 
 impl Module for CpuAffinityModule {
-
     fn new(_analysis: &Analysis, debug: bool) -> Self {
         let keys = [
             Keys::threads_stat,
@@ -45,13 +44,10 @@ impl Module for CpuAffinityModule {
             Keys::flow_recyclers,
             Keys::af_packet_interface_threads,
             Keys::datetime,
-            Keys::ip
+            Keys::ip,
         ];
 
-        let questions: HashMap<Keys, Value> =
-            keys.into_iter()
-                .map(|k| (k, Value::Null))
-                .collect();
+        let questions: HashMap<Keys, Value> = keys.into_iter().map(|k| (k, Value::Null)).collect();
 
         Self { questions, debug }
     }
@@ -60,26 +56,37 @@ impl Module for CpuAffinityModule {
         &self.questions
     }
 
-    fn main(&mut self, answers: &Vec<Answer<'_>>)-> Vec<Change> {
+    fn main(&mut self, answers: &Vec<Answer<'_>>) -> Vec<Change> {
         self.check_drop_rate(answers);
         self.check_kernel_queue_and_rx_descriptors(answers);
         //self.check_nic_warning_counter(answers);
         self.check_rss_balancing(answers);
 
-        let average_packets_for_percent_cpu_usage= self.analyze_average_packets_for_percent_cpu_usage(answers) as f64;
+        let average_packets_for_percent_cpu_usage =
+            self.analyze_average_packets_for_percent_cpu_usage(answers) as f64;
         let all_packets = self.analyze_all_capture_packets_for_decoding(answers) as f64;
         if self.debug {
-            log::debug!("Average_packets_for_percent_cpu_usage: {average_packets_for_percent_cpu_usage}, all_packets: {all_packets}.");
+            log::debug!(
+                "Average_packets_for_percent_cpu_usage: {average_packets_for_percent_cpu_usage}, all_packets: {all_packets}."
+            );
         }
-        let new_workers = (all_packets / (average_packets_for_percent_cpu_usage * CPU_USAGE)).ceil() as u64;
-        let new_wrk_cpu_set = Value::Array(self.set_new_cpu_set(answers, new_workers).iter()
-        .map(|a| Value::Number(Number::from(*a))).collect());
-        *self.questions.get_mut(&Keys::wrk_cpu_set).expect("Unable to get wrk_cpu_set from intern table.") = new_wrk_cpu_set;
+        let new_workers =
+            (all_packets / (average_packets_for_percent_cpu_usage * CPU_USAGE)).ceil() as u64;
+        let new_wrk_cpu_set = Value::Array(
+            self.set_new_cpu_set(answers, new_workers)
+                .iter()
+                .map(|a| Value::Number(Number::from(*a)))
+                .collect(),
+        );
+        *self
+            .questions
+            .get_mut(&Keys::wrk_cpu_set)
+            .expect("Unable to get wrk_cpu_set from intern table.") = new_wrk_cpu_set;
 
-        let datetime  = self.get_datetime_stat(answers);
-        let mut nic_file = yaml::create_nic_bash_file(&datetime);
-        
-        yaml::disable_irqbalance(&mut nic_file);
+        let datetime = self.get_datetime_stat(answers);
+        let mut nic_file = suricata_tun::create_nic_bash_file(&datetime);
+
+        suricata_tun::disable_irqbalance(&mut nic_file);
         self.module_disable_offloading(answers, &mut nic_file);
         self.module_set_rss(answers, &mut nic_file);
         self.module_af_packet_tuning(answers, &mut nic_file);
@@ -88,50 +95,65 @@ impl Module for CpuAffinityModule {
 
         Change::collect_changes(&self.questions)
     }
-
 }
 
 impl CpuAffinityModule {
-
     fn check_nic_warning_counter(&self, answers: &Vec<Answer<'_>>) {
         let interface = self.get_interface_stat(answers);
         let ethtool = self.get_ethtool_stat(answers);
 
         let mut output = Command::new("sh")
             .arg("-c")
-            .arg(format!("sudo {ethtool} -S {} | grep rx_crc_errors.nic: | awk '{{print $2}}'", interface))
+            .arg(format!(
+                "sudo {ethtool} -S {} | grep rx_crc_errors.nic: | awk '{{print $2}}'",
+                interface
+            ))
             .output()
             .expect("Failed to execute process");
 
         if output.status.success() {
-            let rx_crc_errors_nic = String::from_utf8_lossy(&output.stdout).trim().parse::<u64>().expect("Failed to parse rx_crc_errors.nic as u64.");
-             if  rx_crc_errors_nic > 0 {
+            let rx_crc_errors_nic = String::from_utf8_lossy(&output.stdout)
+                .trim()
+                .parse::<u64>()
+                .expect("Failed to parse rx_crc_errors.nic as u64.");
+            if rx_crc_errors_nic > 0 {
                 log::warn!("Packets with corrupted CRC: {rx_crc_errors_nic}, continue.")
             }
         }
 
         output = Command::new("sh")
             .arg("-c")
-            .arg(format!("sudo {ethtool} -S {} | grep rx_jabber.nic: | awk '{{print $2}}'", interface))
+            .arg(format!(
+                "sudo {ethtool} -S {} | grep rx_jabber.nic: | awk '{{print $2}}'",
+                interface
+            ))
             .output()
             .expect("Failed to execute process");
 
         if output.status.success() {
-            let rx_jabber_nic = String::from_utf8_lossy(&output.stdout).trim().parse::<u64>().expect("Failed to parse rx_jabber.nic as u64.");
+            let rx_jabber_nic = String::from_utf8_lossy(&output.stdout)
+                .trim()
+                .parse::<u64>()
+                .expect("Failed to parse rx_jabber.nic as u64.");
             if rx_jabber_nic > 0 {
                 log::warn!("Jabber packets: {rx_jabber_nic}, continue.")
-
             }
         }
 
         output = Command::new("sh")
             .arg("-c")
-            .arg(format!("sudo {ethtool} -S {} | grep rx_csum_bad.nic: | awk '{{print $2}}'", interface))
+            .arg(format!(
+                "sudo {ethtool} -S {} | grep rx_csum_bad.nic: | awk '{{print $2}}'",
+                interface
+            ))
             .output()
             .expect("Failed to execute process");
 
         if output.status.success() {
-            let rx_csum_bad_nic = String::from_utf8_lossy(&output.stdout).trim().parse::<u64>().expect("Failed to parse rx_csum_bad.nic as u64.");
+            let rx_csum_bad_nic = String::from_utf8_lossy(&output.stdout)
+                .trim()
+                .parse::<u64>()
+                .expect("Failed to parse rx_csum_bad.nic as u64.");
             if rx_csum_bad_nic > 0 {
                 log::warn!("Packets with bad checksum: {rx_csum_bad_nic}, continue.")
             }
@@ -139,26 +161,37 @@ impl CpuAffinityModule {
 
         output = Command::new("sh")
             .arg("-c")
-            .arg(format!("sudo {ethtool} -S {} | grep rx_length_errors.nic: | awk '{{print $2}}'", interface))
+            .arg(format!(
+                "sudo {ethtool} -S {} | grep rx_length_errors.nic: | awk '{{print $2}}'",
+                interface
+            ))
             .output()
             .expect("Failed to execute process");
 
         if output.status.success() {
-            let rx_length_errors_nic = String::from_utf8_lossy(&output.stdout).trim().parse::<u64>().expect("Failed to parse rx_length_errors.nic as u64.");
+            let rx_length_errors_nic = String::from_utf8_lossy(&output.stdout)
+                .trim()
+                .parse::<u64>()
+                .expect("Failed to parse rx_length_errors.nic as u64.");
             if rx_length_errors_nic > 0 {
                 log::warn!("Packets with invalid length: {rx_length_errors_nic}, continue.")
             }
         }
 
-
         output = Command::new("sh")
             .arg("-c")
-            .arg(format!("sudo {ethtool} -S {} | grep rx_oversize.nic: | awk '{{print $2}}'", interface))
+            .arg(format!(
+                "sudo {ethtool} -S {} | grep rx_oversize.nic: | awk '{{print $2}}'",
+                interface
+            ))
             .output()
             .expect("Failed to execute process");
 
         if output.status.success() {
-            let rx_oversize_nic = String::from_utf8_lossy(&output.stdout).trim().parse::<u64>().expect("Failed to parse rx_oversize.nic as u64.");
+            let rx_oversize_nic = String::from_utf8_lossy(&output.stdout)
+                .trim()
+                .parse::<u64>()
+                .expect("Failed to parse rx_oversize.nic as u64.");
             if rx_oversize_nic > 0 {
                 log::warn!("Oversized packets: {rx_oversize_nic}, continue.")
             }
@@ -172,37 +205,54 @@ impl CpuAffinityModule {
         let mut average: f64 = 0.0;
         let mut record: u64 = 0;
 
-        for (decoder_packets_per_thread, cpu_usage_per_thread, decoder_invalid_per_thread) in izip!(decoder_packets.iter(), cpu_usage.iter(), decoder_invalid.iter()){
+        for (decoder_packets_per_thread, cpu_usage_per_thread, decoder_invalid_per_thread) in izip!(
+            decoder_packets.iter(),
+            cpu_usage.iter(),
+            decoder_invalid.iter()
+        ) {
+            if self.debug {
+                log::debug!(
+                    "Decoder_packets_per_thread: {:?}, cpu_usage_per_thread: {:?}.",
+                    decoder_packets_per_thread,
+                    cpu_usage_per_thread
+                );
+            }
+            let mut decoder_vec = decoder_packets_per_thread.value.clone();
+            decoder_vec = self.clean_global_statistic(&decoder_vec);
+            decoder_vec.drain(0..1);
+
+            let mut decoder_in_vec = decoder_invalid_per_thread.value.clone();
+            decoder_in_vec = self.clean_global_statistic(&decoder_in_vec);
+            decoder_in_vec.drain(0..1);
+
+            let mut cpu_usage_vec = cpu_usage_per_thread.cpu_usage.clone();
+            cpu_usage_vec.drain(0..1);
+
+            for (cpu_usage, decoder, decoder_in) in izip!(
+                cpu_usage_vec.iter(),
+                decoder_vec.iter(),
+                decoder_in_vec.iter()
+            ) {
                 if self.debug {
-                    log::debug!("Decoder_packets_per_thread: {:?}, cpu_usage_per_thread: {:?}.", decoder_packets_per_thread, cpu_usage_per_thread);
+                    log::debug!(
+                        "Cpu_usage: {cpu_usage}, decoder: {decoder}, decoder_in: {decoder_in}."
+                    );
                 }
-                let mut decoder_vec = decoder_packets_per_thread.value.clone();
-                decoder_vec = self.clean_global_statistic(&decoder_vec);
-                decoder_vec.drain(0..1);
-
-                let mut decoder_in_vec = decoder_invalid_per_thread.value.clone();
-                decoder_in_vec = self.clean_global_statistic(&decoder_in_vec);
-                decoder_in_vec.drain(0..1);
-
-                let mut cpu_usage_vec = cpu_usage_per_thread.cpu_usage.clone();
-                cpu_usage_vec.drain(0..1);
-
-                for (cpu_usage, decoder, decoder_in) in izip!(cpu_usage_vec.iter(), decoder_vec.iter(), decoder_in_vec.iter()) {
+                if (*decoder + *decoder_in) > 0 && *cpu_usage > 0.0 {
+                    let packets_per_percent_usage: f64 =
+                        ((*decoder + *decoder_in) as f32 / *cpu_usage) as f64;
                     if self.debug {
-                        log::debug!("Cpu_usage: {cpu_usage}, decoder: {decoder}, decoder_in: {decoder_in}.");
+                        log::debug!(
+                            "Packets_per_percent_usage: {:?}.",
+                            packets_per_percent_usage
+                        );
                     }
-                    if (*decoder + *decoder_in) > 0 && *cpu_usage > 0.0 {
-                        let packets_per_percent_usage: f64 = ((*decoder + *decoder_in) as f32 / *cpu_usage) as f64;
-                        if self.debug {
-                            log::debug!("Packets_per_percent_usage: {:?}.", packets_per_percent_usage);
-                        }
-                        record += 1;
-                        average += (packets_per_percent_usage - average) / record as f64;
-                    }
+                    record += 1;
+                    average += (packets_per_percent_usage - average) / record as f64;
                 }
+            }
         }
         average as u64
-
     }
 
     fn clean_global_statistic(&self, vector: &Vec<u64>) -> Vec<u64> {
@@ -210,12 +260,10 @@ impl CpuAffinityModule {
         for i in 0..vector.len() {
             let current = vector.get(i).expect("Unable to get u64.");
             if i != 0 {
-                let before = vector.get(i-1).expect("Unable to get u64.");
-                 clean_vector.push(*current - *before);
-            }
-            else {
+                let before = vector.get(i - 1).expect("Unable to get u64.");
+                clean_vector.push(*current - *before);
+            } else {
                 clean_vector.push(*current);
-
             }
         }
         clean_vector
@@ -225,37 +273,49 @@ impl CpuAffinityModule {
         let capture_kernel_packets_all = self.get_capture_kernel_packets_all(answers) as f64;
         let capture_kernel_drops_drops_all = self.get_capture_kernel_drops_all(answers) as f64;
         if capture_kernel_drops_drops_all > 0.0 {
-            let drop_rate = (capture_kernel_drops_drops_all/capture_kernel_packets_all)*100.0;
+            let drop_rate = (capture_kernel_drops_drops_all / capture_kernel_packets_all) * 100.0;
             if self.debug {
                 log::debug!("Drop-rate: {}.", drop_rate);
             }
-            if  drop_rate > 1.0 {
-                panic!("Unable to configure Suricata, with the highest settings Suricata still drops more than 1.0 % : {drop_rate}, add more cpu cores.")
+            if drop_rate > 1.0 {
+                panic!(
+                    "Unable to configure Suricata, with the highest settings Suricata still drops more than 1.0 % : {drop_rate}, add more cpu cores."
+                )
             }
         } else {
             if self.debug {
                 log::debug!("Drop-rate: 0.");
             }
         }
-
     }
 
     fn check_kernel_queue_and_rx_descriptors(&self, answers: &Vec<Answer<'_>>) {
-        let nic_dropped = self.get_nic_dropped(answers).into_iter().max().expect("Unable to get nic_dropped maximum.") as f64;
-        let nic_dropped_nic =  self.get_nic_dropped_nic(answers).into_iter().max().expect("Unable to get nic_dropped_nic maximum.") as f64;
+        let nic_dropped = self
+            .get_nic_dropped(answers)
+            .into_iter()
+            .max()
+            .expect("Unable to get nic_dropped maximum.") as f64;
+        let nic_dropped_nic = self
+            .get_nic_dropped_nic(answers)
+            .into_iter()
+            .max()
+            .expect("Unable to get nic_dropped_nic maximum.") as f64;
         let capture_kernel_packets_all = self.get_capture_kernel_packets_all(answers) as f64;
         let capture_kernel_drops_drops_all = self.get_capture_kernel_drops_all(answers) as f64;
-        if capture_kernel_drops_drops_all+nic_dropped+nic_dropped_nic > 0.0 {
+        if capture_kernel_drops_drops_all + nic_dropped + nic_dropped_nic > 0.0 {
             if self.debug {
-                log::debug!("Capture_kernel_packets_all: {capture_kernel_packets_all}, capture_kernel_drops_drops_all: {capture_kernel_drops_drops_all}, nic_dropped: {nic_dropped}, nic_dropped_nic: {nic_dropped_nic}.");
+                log::debug!(
+                    "Capture_kernel_packets_all: {capture_kernel_packets_all}, capture_kernel_drops_drops_all: {capture_kernel_drops_drops_all}, nic_dropped: {nic_dropped}, nic_dropped_nic: {nic_dropped_nic}."
+                );
             }
-            let drop_rate = ((capture_kernel_drops_drops_all+nic_dropped+nic_dropped_nic)/capture_kernel_packets_all)*100.0;
+            let drop_rate = ((capture_kernel_drops_drops_all + nic_dropped + nic_dropped_nic)
+                / capture_kernel_packets_all)
+                * 100.0;
             if self.debug {
                 log::debug!("Drop-rate: {}.", drop_rate);
             }
 
             log::warn!("Dropped NIC packets: {nic_dropped}, continue.")
-
         } else {
             if self.debug {
                 log::debug!("Drop-rate: 0.");
@@ -273,33 +333,46 @@ impl CpuAffinityModule {
         let nic_dropped_nic = self.clean_global_statistic(&self.get_nic_dropped_nic(answers));
         let nic_dropped = self.clean_global_statistic(&self.get_nic_dropped(answers));
 
-        for (capture_kernel_packets_per_thread, capture_kernel_drops_per_thread) in capture_kernel_packets.iter().zip(capture_kernel_drops.iter()) {
-            cleaned_capture_kernel_packets_vec.push(self.clean_global_statistic(&capture_kernel_packets_per_thread.value));
-            cleaned_capture_kernel_drops_vec.push(self.clean_global_statistic(&capture_kernel_drops_per_thread.value));
+        for (capture_kernel_packets_per_thread, capture_kernel_drops_per_thread) in
+            capture_kernel_packets
+                .iter()
+                .zip(capture_kernel_drops.iter())
+        {
+            cleaned_capture_kernel_packets_vec
+                .push(self.clean_global_statistic(&capture_kernel_packets_per_thread.value));
+            cleaned_capture_kernel_drops_vec
+                .push(self.clean_global_statistic(&capture_kernel_drops_per_thread.value));
         }
 
         for i in 0..cleaned_capture_kernel_packets_vec[0].len() {
             let mut sum = 0;
-            for (packets_vec, drops_vec) in cleaned_capture_kernel_packets_vec.iter().zip(cleaned_capture_kernel_drops_vec.iter()) {
-                let nic_dropped_nic_val =
-                        if i >= nic_dropped_nic.len() {
-                            nic_dropped_nic[nic_dropped.len() - 1]
-                        }
-                        else {
-                            nic_dropped_nic[i]
-                        };
+            for (packets_vec, drops_vec) in cleaned_capture_kernel_packets_vec
+                .iter()
+                .zip(cleaned_capture_kernel_drops_vec.iter())
+            {
+                let nic_dropped_nic_val = if i >= nic_dropped_nic.len() {
+                    nic_dropped_nic[nic_dropped.len() - 1]
+                } else {
+                    nic_dropped_nic[i]
+                };
 
-                let nic_dropped_val =
-                    if i >= nic_dropped.len() {
-                        nic_dropped_nic[nic_dropped.len() - 1]
-                    }
-                    else {
-                        nic_dropped[i]
-                    };
+                let nic_dropped_val = if i >= nic_dropped.len() {
+                    nic_dropped_nic[nic_dropped.len() - 1]
+                } else {
+                    nic_dropped[i]
+                };
 
-                sum += packets_vec[i] + drops_vec.get(i).expect("Unable to get drops_vec.")  + nic_dropped_nic_val;
+                sum += packets_vec[i]
+                    + drops_vec.get(i).expect("Unable to get drops_vec.")
+                    + nic_dropped_nic_val;
                 if self.debug {
-                    log::debug!("Packets_vec[i]: {}, drops_vec[i]: {}, nic_dropped_nic_val: {}, nic_dropped_val: {}.", packets_vec[i], drops_vec[i], nic_dropped_nic_val, nic_dropped_val)
+                    log::debug!(
+                        "Packets_vec[i]: {}, drops_vec[i]: {}, nic_dropped_nic_val: {}, nic_dropped_val: {}.",
+                        packets_vec[i],
+                        drops_vec[i],
+                        nic_dropped_nic_val,
+                        nic_dropped_val
+                    )
                 }
             }
             sum = sum / cleaned_capture_kernel_packets_vec.len() as u64;
@@ -311,22 +384,30 @@ impl CpuAffinityModule {
         let workers = self.get_workers(answers);
 
         if self.debug {
-            log::debug!("Cleaned_capture_kernel_packets_vec.len: {}, workers: {}.", cleaned_capture_kernel_packets_vec.len(), workers);
-            log::debug!("Average_max_packets_per_thread: {:?}.", average_max_packets_per_thread);
+            log::debug!(
+                "Cleaned_capture_kernel_packets_vec.len: {}, workers: {}.",
+                cleaned_capture_kernel_packets_vec.len(),
+                workers
+            );
+            log::debug!(
+                "Average_max_packets_per_thread: {:?}.",
+                average_max_packets_per_thread
+            );
         }
-        (average_max_packets_per_thread as f64 *workers*CPU_MULTIPLIER) as u64
+        (average_max_packets_per_thread as f64 * workers * CPU_MULTIPLIER) as u64
     }
 
     fn check_rss_balancing(&self, answers: &Vec<Answer<'_>>) {
         let capture_kernel_packets = self.get_capture_kernel_packets_stat(answers);
 
-        let values: Vec<f64> = capture_kernel_packets.iter().filter_map(|c| c.value.last().copied()).map(|v| v as f64).collect();
+        let values: Vec<f64> = capture_kernel_packets
+            .iter()
+            .filter_map(|c| c.value.last().copied())
+            .map(|v| v as f64)
+            .collect();
         let mean = values.iter().sum::<f64>() / values.len() as f64;
 
-        let variance = values
-            .iter()
-            .map(|v| (v - mean).powi(2))
-            .sum::<f64>() / values.len() as f64;
+        let variance = values.iter().map(|v| (v - mean).powi(2)).sum::<f64>() / values.len() as f64;
 
         let deviation = variance.sqrt();
 
@@ -341,122 +422,257 @@ impl CpuAffinityModule {
     }
 
     fn get_interface_stat<'a>(&self, answers: &Vec<Answer<'a>>) -> &'a str {
-        answers.iter().find(|h| h.key == &Keys::interface).and_then(|h| h.value.as_str()).expect("Interface cannot be found.")
+        answers
+            .iter()
+            .find(|h| h.key == &Keys::interface)
+            .and_then(|h| h.value.as_str())
+            .expect("Interface cannot be found.")
     }
 
-    fn get_ethtool_stat<'a>(&self, answers: &Vec<Answer<'a>>) -> &'a str  {
-        answers.iter().find(|h| h.key == &Keys::ethtool).and_then(|h| h.value.as_str()).expect("Ethtool cannot be found.")
+    fn get_ethtool_stat<'a>(&self, answers: &Vec<Answer<'a>>) -> &'a str {
+        answers
+            .iter()
+            .find(|h| h.key == &Keys::ethtool)
+            .and_then(|h| h.value.as_str())
+            .expect("Ethtool cannot be found.")
     }
 
-    fn get_ip_stat<'a>(&self, answers: &Vec<Answer<'a>>) -> &'a str  {
-        answers.iter().find(|h| h.key == &Keys::ip).and_then(|h| h.value.as_str()).expect("Ip cannot be found.")
+    fn get_ip_stat<'a>(&self, answers: &Vec<Answer<'a>>) -> &'a str {
+        answers
+            .iter()
+            .find(|h| h.key == &Keys::ip)
+            .and_then(|h| h.value.as_str())
+            .expect("Ip cannot be found.")
     }
 
     fn get_datetime_stat(&self, answers: &Vec<Answer<'_>>) -> DateTime<Utc> {
-        answers.iter().find(|h| h.key == &Keys::datetime)
-            .and_then(|h| h.value.as_str()).and_then(|v| DateTime::parse_from_rfc3339(v).ok())
-            .map(|dt| dt.with_timezone(&Utc)).expect("Unable to get datetime.")
+        answers
+            .iter()
+            .find(|h| h.key == &Keys::datetime)
+            .and_then(|h| h.value.as_str())
+            .and_then(|v| DateTime::parse_from_rfc3339(v).ok())
+            .map(|dt| dt.with_timezone(&Utc))
+            .expect("Unable to get datetime.")
     }
 
     fn get_capture_kernel_drops_stat(&self, answers: &Vec<Answer<'_>>) -> Vec<CpuThread> {
-        answers.iter().find(|h| h.key == &Keys::capture_kernel_drops).expect("Capture kernel drops cannot be found.")
-            .value.as_array().expect("Unable to get capture_kernel_drops as array.").iter().map(|v|
-            {
+        answers
+            .iter()
+            .find(|h| h.key == &Keys::capture_kernel_drops)
+            .expect("Capture kernel drops cannot be found.")
+            .value
+            .as_array()
+            .expect("Unable to get capture_kernel_drops as array.")
+            .iter()
+            .map(|v| {
                 let obj = v.as_object().expect("Expected object.");
-                let name  = obj.get("name").expect("Expected name in CpuThread structure.").as_str().expect("Unable to transform cpu name to str.").to_string();
-                let value: Vec<u64> = obj.get("value").and_then(|v| v.as_array())
-                .expect("Expected value in CpuThread structure.").iter().map(|num| num.as_u64().expect("Unable to transform cpu value to u64.")).collect();
+                let name = obj
+                    .get("name")
+                    .expect("Expected name in CpuThread structure.")
+                    .as_str()
+                    .expect("Unable to transform cpu name to str.")
+                    .to_string();
+                let value: Vec<u64> = obj
+                    .get("value")
+                    .and_then(|v| v.as_array())
+                    .expect("Expected value in CpuThread structure.")
+                    .iter()
+                    .map(|num| num.as_u64().expect("Unable to transform cpu value to u64."))
+                    .collect();
                 CpuThread { name, value }
-            }
-        ).collect()
+            })
+            .collect()
     }
 
     fn get_capture_kernel_packets_stat(&self, answers: &Vec<Answer<'_>>) -> Vec<CpuThread> {
-        answers.iter().find(|h| h.key == &Keys::capture_kernel_packets).expect("Capture kernel packets cannot be found.")
-            .value.as_array().expect("Unable to get capture_kernel_drops as array.").iter().map(|v|
-            {
+        answers
+            .iter()
+            .find(|h| h.key == &Keys::capture_kernel_packets)
+            .expect("Capture kernel packets cannot be found.")
+            .value
+            .as_array()
+            .expect("Unable to get capture_kernel_drops as array.")
+            .iter()
+            .map(|v| {
                 let obj = v.as_object().expect("Expected object.");
-                let name  = obj.get("name").expect("Expected name in CpuThread structure.").as_str().expect("Unable to transform cpu name to str.").to_string();
-                let value: Vec<u64> = obj.get("value").and_then(|v| v.as_array())
-                    .expect("Expected value in CpuThread structure.").iter().map(|num| num.as_u64().expect("Unable to transform cpu value to u64.")).collect();
+                let name = obj
+                    .get("name")
+                    .expect("Expected name in CpuThread structure.")
+                    .as_str()
+                    .expect("Unable to transform cpu name to str.")
+                    .to_string();
+                let value: Vec<u64> = obj
+                    .get("value")
+                    .and_then(|v| v.as_array())
+                    .expect("Expected value in CpuThread structure.")
+                    .iter()
+                    .map(|num| num.as_u64().expect("Unable to transform cpu value to u64."))
+                    .collect();
                 CpuThread { name, value }
-            }
-        ).collect()
+            })
+            .collect()
     }
 
     fn get_capture_errors_stat(&self, answers: &Vec<Answer<'_>>) -> Vec<CpuThread> {
-        answers.iter().find(|h| h.key == &Keys::capture_errors).expect("Capture errors cannot be found.")
-            .value.as_array().expect("Unable to get capture_kernel_drops as array.").iter().map(|v|
-            {
+        answers
+            .iter()
+            .find(|h| h.key == &Keys::capture_errors)
+            .expect("Capture errors cannot be found.")
+            .value
+            .as_array()
+            .expect("Unable to get capture_kernel_drops as array.")
+            .iter()
+            .map(|v| {
                 let obj = v.as_object().expect("Expected object.");
-                let name  = obj.get("name").expect("Expected name in CpuThread structure.").as_str().expect("Unable to transform cpu name to str.").to_string();
-                let value: Vec<u64> = obj.get("value").and_then(|v| v.as_array())
-                    .expect("Expected value in CpuThread structure.").iter().map(|num| num.as_u64().expect("Unable to transform cpu value to u64.")).collect();
+                let name = obj
+                    .get("name")
+                    .expect("Expected name in CpuThread structure.")
+                    .as_str()
+                    .expect("Unable to transform cpu name to str.")
+                    .to_string();
+                let value: Vec<u64> = obj
+                    .get("value")
+                    .and_then(|v| v.as_array())
+                    .expect("Expected value in CpuThread structure.")
+                    .iter()
+                    .map(|num| num.as_u64().expect("Unable to transform cpu value to u64."))
+                    .collect();
                 CpuThread { name, value }
-            }
-        ).collect()
+            })
+            .collect()
     }
 
     fn get_decoder_packets_stat(&self, answers: &Vec<Answer<'_>>) -> Vec<CpuThread> {
-        answers.iter().find(|h| h.key == &Keys::decoder_pkts).expect("Decoder packets cannot be found.")
-            .value.as_array().expect("Unable to get capture_kernel_drops as array.").iter().map(|v|
-            {
+        answers
+            .iter()
+            .find(|h| h.key == &Keys::decoder_pkts)
+            .expect("Decoder packets cannot be found.")
+            .value
+            .as_array()
+            .expect("Unable to get capture_kernel_drops as array.")
+            .iter()
+            .map(|v| {
                 let obj = v.as_object().expect("Expected object.");
-                let name  = obj.get("name").expect("Expected name in CpuThread structure.").as_str().expect("Unable to transform cpu name to str.").to_string();
-                let value: Vec<u64> = obj.get("value").and_then(|v| v.as_array())
-                    .expect("Expected value in CpuThread structure.").iter().map(|num| num.as_u64().expect("Unable to transform cpu value to u64.")).collect();
+                let name = obj
+                    .get("name")
+                    .expect("Expected name in CpuThread structure.")
+                    .as_str()
+                    .expect("Unable to transform cpu name to str.")
+                    .to_string();
+                let value: Vec<u64> = obj
+                    .get("value")
+                    .and_then(|v| v.as_array())
+                    .expect("Expected value in CpuThread structure.")
+                    .iter()
+                    .map(|num| num.as_u64().expect("Unable to transform cpu value to u64."))
+                    .collect();
                 CpuThread { name, value }
-            }
-        ).collect()
+            })
+            .collect()
     }
 
     fn get_decoder_invalid_stat(&self, answers: &Vec<Answer<'_>>) -> Vec<CpuThread> {
-        answers.iter().find(|h| h.key == &Keys::decoder_invalid).expect("Decoder invalid cannot be found.")
-            .value.as_array().expect("Unable to get capture_kernel_drops as array.").iter().map(|v|
-            {
+        answers
+            .iter()
+            .find(|h| h.key == &Keys::decoder_invalid)
+            .expect("Decoder invalid cannot be found.")
+            .value
+            .as_array()
+            .expect("Unable to get capture_kernel_drops as array.")
+            .iter()
+            .map(|v| {
                 let obj = v.as_object().expect("Expected object.");
-                let name  = obj.get("name").expect("Expected name in CpuThread structure.").as_str().expect("Unable to transform cpu name to str.").to_string();
-                let value: Vec<u64> = obj.get("value").and_then(|v| v.as_array())
-                    .expect("Expected value in CpuThread structure.").iter().map(|num| num.as_u64().expect("Unable to transform cpu value to u64.")).collect();
+                let name = obj
+                    .get("name")
+                    .expect("Expected name in CpuThread structure.")
+                    .as_str()
+                    .expect("Unable to transform cpu name to str.")
+                    .to_string();
+                let value: Vec<u64> = obj
+                    .get("value")
+                    .and_then(|v| v.as_array())
+                    .expect("Expected value in CpuThread structure.")
+                    .iter()
+                    .map(|num| num.as_u64().expect("Unable to transform cpu value to u64."))
+                    .collect();
                 CpuThread { name, value }
-            }
-        ).collect()
+            })
+            .collect()
     }
 
     fn get_nic_dropped_nic(&self, answers: &Vec<Answer<'_>>) -> Vec<u64> {
-        answers.iter().find(|h| h.key == &Keys::ethtool_stat).expect("Ethtool stat cannot be found.").value.as_array()
-        .expect("Unable to get ethtool_stat as array.").iter().find(|obj| { obj.get("name").and_then(|n| n.as_str()) == Some("rx_dropped_nic") })
-        .expect("Rx_dropped_nic not found.").get("value").and_then(|v| v.as_array()).expect("Value is not array.").iter()
-        .map(|n| n.as_u64().expect("Not a number.")).collect()
+        answers
+            .iter()
+            .find(|h| h.key == &Keys::ethtool_stat)
+            .expect("Ethtool stat cannot be found.")
+            .value
+            .as_array()
+            .expect("Unable to get ethtool_stat as array.")
+            .iter()
+            .find(|obj| obj.get("name").and_then(|n| n.as_str()) == Some("rx_dropped_nic"))
+            .expect("Rx_dropped_nic not found.")
+            .get("value")
+            .and_then(|v| v.as_array())
+            .expect("Value is not array.")
+            .iter()
+            .map(|n| n.as_u64().expect("Not a number."))
+            .collect()
     }
 
     fn get_nic_dropped(&self, answers: &Vec<Answer<'_>>) -> Vec<u64> {
-        answers.iter().find(|h| h.key == &Keys::ethtool_stat).expect("Ethtool stat cannot be found.").value.as_array()
-        .expect("Unable to get ethtool_stat as array.").iter().find(|obj| { obj.get("name").and_then(|n| n.as_str()) == Some("rx_dropped") })
-        .expect("Rx_dropped_nic not found.").get("value").and_then(|v| v.as_array()).expect("Value is not array.").iter()
-        .map(|n| n.as_u64().expect("Not a number.")).collect()
+        answers
+            .iter()
+            .find(|h| h.key == &Keys::ethtool_stat)
+            .expect("Ethtool stat cannot be found.")
+            .value
+            .as_array()
+            .expect("Unable to get ethtool_stat as array.")
+            .iter()
+            .find(|obj| obj.get("name").and_then(|n| n.as_str()) == Some("rx_dropped"))
+            .expect("Rx_dropped_nic not found.")
+            .get("value")
+            .and_then(|v| v.as_array())
+            .expect("Value is not array.")
+            .iter()
+            .map(|n| n.as_u64().expect("Not a number."))
+            .collect()
     }
 
     fn get_capture_kernel_packets_all(&self, answers: &Vec<Answer<'_>>) -> u64 {
-        self.get_capture_kernel_packets_stat(answers).iter().map(|a| a.value.last().expect("Expected element.")).sum::<u64>()
+        self.get_capture_kernel_packets_stat(answers)
+            .iter()
+            .map(|a| a.value.last().expect("Expected element."))
+            .sum::<u64>()
     }
 
     fn get_capture_kernel_drops_all(&self, answers: &Vec<Answer<'_>>) -> u64 {
-        self.get_capture_kernel_drops_stat(answers).iter().map(|a| a.value.last().expect("Expected element.")).sum::<u64>()
+        self.get_capture_kernel_drops_stat(answers)
+            .iter()
+            .map(|a| a.value.last().expect("Expected element."))
+            .sum::<u64>()
     }
 
     fn get_wrk_cpu_set(&self) -> Vec<u64> {
         self.questions
-            .get(&Keys::wrk_cpu_set).expect("Unable to get wrk_cpu_set.").as_array()
-            .expect("wrk_cpu_set is not an array").iter()
-            .map(|a| a.as_u64().expect("Expected u64 value")).collect()
+            .get(&Keys::wrk_cpu_set)
+            .expect("Unable to get wrk_cpu_set.")
+            .as_array()
+            .expect("wrk_cpu_set is not an array")
+            .iter()
+            .map(|a| a.as_u64().expect("Expected u64 value"))
+            .collect()
     }
 
     fn get_max_cpu_usage_vec(&self, answers: &Vec<Answer<'_>>) -> Vec<u64> {
-        let value = answers.iter().find(|h| h.key == &Keys::max_cpu_usage_vec)
-            .expect("Max cpu usage vector cannot be found.").value;
+        let value = answers
+            .iter()
+            .find(|h| h.key == &Keys::max_cpu_usage_vec)
+            .expect("Max cpu usage vector cannot be found.")
+            .value;
 
-        let seq = value.as_array().expect("Unable to get max_cpu_usage_vec as array.");
+        let seq = value
+            .as_array()
+            .expect("Unable to get max_cpu_usage_vec as array.");
 
         let mut cpus: Vec<u64> = Vec::new();
         let mut seen = HashSet::new();
@@ -465,7 +681,7 @@ impl CpuAffinityModule {
             let s = match item {
                 Value::Number(n) => n.to_string(),
                 Value::String(s) => s.clone(),
-                u => panic!("Invalid CPU {:?}.", u)
+                u => panic!("Invalid CPU {:?}.", u),
             };
             yaml::insert_cpu(&s, &mut seen, &mut cpus)
                 .expect("Unable to parse max_cpu_usage_vec as u64 vector.");
@@ -478,7 +694,7 @@ impl CpuAffinityModule {
         cpus
     }
 
-    pub fn set_new_cpu_set(&self, answers: &Vec<Answer<'_>>, mut new_workers: u64) -> Vec<u64>  {
+    pub fn set_new_cpu_set(&self, answers: &Vec<Answer<'_>>, mut new_workers: u64) -> Vec<u64> {
         let max_cpu_usage_vec = self.get_max_cpu_usage_vec(answers);
 
         if self.debug {
@@ -497,17 +713,16 @@ impl CpuAffinityModule {
         let numa_node = self.get_interface_numa_node(answers);
         if numa_node == -1 {
             new_wrk_cpu_set = max_cpu_usage_vec[..new_workers as usize].to_vec();
-        }
-        else {
+        } else {
             let mut cpu_counter = 0;
             let numa_cpus = self.get_numa_node_with_cpus(numa_node);
             for cpu in &max_cpu_usage_vec {
-                if cpu_counter == new_workers  {
+                if cpu_counter == new_workers {
                     break;
                 }
                 if numa_cpus.contains(cpu) {
                     new_wrk_cpu_set.push(*cpu);
-                    cpu_counter +=1;
+                    cpu_counter += 1;
                 }
             }
 
@@ -517,7 +732,7 @@ impl CpuAffinityModule {
                 }
                 if !numa_cpus.contains(cpu) {
                     new_wrk_cpu_set.push(*cpu);
-                    cpu_counter +=1;
+                    cpu_counter += 1;
                 }
             }
         }
@@ -526,21 +741,20 @@ impl CpuAffinityModule {
 
     fn set_af_packet_threads(&mut self) {
         let wrk_cpu_set_len = self.get_wrk_cpu_set().len() as u64;
-        *self.questions.get_mut(&Keys::af_packet_interface_threads).expect("Unable to get af_packet_interface_threads") =
+        *self
+            .questions
+            .get_mut(&Keys::af_packet_interface_threads)
+            .expect("Unable to get af_packet_interface_threads") =
             Value::Number(wrk_cpu_set_len.into());
     }
 
     fn get_interface_numa_node(&self, answers: &Vec<Answer<'_>>) -> i8 {
         let interface = self.get_interface_stat(answers);
 
-        let numa_node = fs::read_to_string(
-            format!("/sys/class/net/{interface}/device/numa_node")
-        ).expect("Failed to read file.");
+        let numa_node = fs::read_to_string(format!("/sys/class/net/{interface}/device/numa_node"))
+            .expect("Failed to read file.");
 
-        let numa_node: i8 = numa_node
-            .trim()
-            .parse()
-            .expect("Failed to parse number.");
+        let numa_node: i8 = numa_node.trim().parse().expect("Failed to parse number.");
 
         if numa_node == -1 {
             log::warn!("Interface not bounded to NUMA node.");
@@ -549,36 +763,40 @@ impl CpuAffinityModule {
     }
 
     fn get_numa_node_with_cpus(&self, numa_node: i8) -> Vec<u64> {
-        let numa_node_cpus = fs::read_to_string(
-            format!("/sys/devices/system/node/node{numa_node}/cpulist")
-        ).expect("Failed to read file.");
-        numa_node_cpus.trim().split(',').map(|x| x.parse().expect("Failed to parse number.")).collect()
+        let numa_node_cpus =
+            fs::read_to_string(format!("/sys/devices/system/node/node{numa_node}/cpulist"))
+                .expect("Failed to read file.");
+        numa_node_cpus
+            .trim()
+            .split(',')
+            .map(|x| x.parse().expect("Failed to parse number."))
+            .collect()
     }
 
     fn module_af_packet_tuning(&self, answers: &Vec<Answer<'_>>, nic_file: &mut File) {
         let interface = self.get_interface_stat(answers);
-        let ethtool =  self.get_ethtool_stat(answers);
+        let ethtool = self.get_ethtool_stat(answers);
         let ip = self.get_ip_stat(answers);
         let wrk_cpu_set_len = self.get_wrk_cpu_set().len() as u64;
-        yaml::af_packet_tuning(interface, wrk_cpu_set_len, ethtool, ip, nic_file);
+        suricata_tun::af_packet_tuning(interface, wrk_cpu_set_len, ethtool, ip, nic_file);
     }
 
     fn module_set_rss(&self, answers: &Vec<Answer<'_>>, nic_file: &mut File) {
         let interface = self.get_interface_stat(answers);
-        let ethtool =  self.get_ethtool_stat(answers);
+        let ethtool = self.get_ethtool_stat(answers);
         let wrk_cpu_set_len = self.get_wrk_cpu_set().len() as u64;
-        _ = yaml::set_rss(interface, wrk_cpu_set_len, ethtool, nic_file);
+        _ = suricata_tun::set_rss(interface, wrk_cpu_set_len, ethtool, nic_file);
     }
 
     fn module_set_hard_irq(&self, answers: &Vec<Answer<'_>>, nic_file: &mut File) {
         let interface = self.get_interface_stat(answers);
         let wrk_cpu_set = self.get_wrk_cpu_set();
-        yaml::set_hard_irq(interface, &wrk_cpu_set, nic_file);
+        suricata_tun::set_hard_irq(interface, &wrk_cpu_set, nic_file);
     }
 
     fn module_disable_offloading(&self, answers: &Vec<Answer<'_>>, nic_file: &mut File) {
         let interface = self.get_interface_stat(answers);
-        let ethtool =  self.get_ethtool_stat(answers);
-        yaml::disable_offloading(interface, ethtool, nic_file);
+        let ethtool = self.get_ethtool_stat(answers);
+        suricata_tun::disable_offloading(interface, ethtool, nic_file);
     }
 }
