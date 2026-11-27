@@ -829,18 +829,12 @@ pub fn set_interface_section(
                         .as_str()
                         .expect("Unable to get af_packet interface as str.")
                 {
-                    if let None = intf
-                        .as_mapping_mut()
+                    intf.as_mapping_mut()
                         .expect("Unable to get mapping for af_packet interface.")
-                        .get_mut("threads")
-                    {
-                        intf.as_mapping_mut()
-                            .expect("Unable to get mapping for af_packet interface.")
-                            .insert(
-                                Value::String("threads".to_string()),
-                                Value::Number(cpus.len().into()),
-                            );
-                    }
+                        .insert(
+                            Value::String("threads".to_string()),
+                            Value::Number(cpus.len().into()),
+                        );
 
                     if suriconf.modules.contains(&Modules::CpuAffinity) {
                         if intf
