@@ -663,7 +663,7 @@ pub fn af_packet_tuning(
     }
 }
 
-pub fn set_rss(interface: &str, threads: u64, ethtool: &str, nic_file: &mut File) -> u8 {
+pub fn set_rss(interface: &str, threads: u64, ethtool: &str, nic_file: &mut File) -> u64 {
     let ethtool_l = run_command_and_write_it_down(
         "sudo",
         &[format!("{ethtool}").as_str(), "-l", interface],
@@ -700,7 +700,7 @@ pub fn set_rss(interface: &str, threads: u64, ethtool: &str, nic_file: &mut File
 
     if combined_max < threads {
         log::warn!("Shrinking the CPU set to match the RSS queues: {combined_max}.");
-        (threads - combined_max) as u8
+        threads - combined_max
     } else {
         0
     }
