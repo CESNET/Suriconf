@@ -814,12 +814,22 @@ pub fn set_interface_section(
                 set_hard_irq(&suriconf.interface, &cpus, &mut nic_file);
             }
 
-            for intf in suricata_string
+            if suricata_string.get("af-packet").is_none() {
+                suricata_string
+                    .as_mapping_mut()
+                    .expect("Suricata configuration is not a mapping.")
+                    .insert(
+                        Value::String("af-packet".to_string()),
+                        Value::Sequence(Sequence::new()),
+                    );
+            }
+
+            let af_packet = suricata_string
                 .get_mut("af-packet")
-                .expect("Unable to get af_packet.")
-                .as_sequence_mut()
-                .expect("Unable to get sequence from af_packet.")
-            {
+                .and_then(|value| value.as_sequence_mut())
+                .expect("Unable to get sequence from af_packet.");
+
+            for intf in af_packet {
                 if suriconf.interface
                     == intf
                         .as_mapping()
